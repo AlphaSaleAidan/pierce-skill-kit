@@ -1,0 +1,286 @@
+#!/bin/sh
+# bridge - let a Claude Code session on your own computer talk to the lead on your server, over SSH only.
+#   bridge setup me@my-server [--name N] [--harden]   one-time setup (Mac/Linux; on Windows use bridge.ps1)
+#   bridge send "<text>"          type a message into the server's lead window (no text: read it from stdin)
+#   bridge inbox [--all]          show new replies from the lead, then mark them read
+#   bridge sync [--watch [N]]     mirror the shared context folder both ways (--watch: every N s, default 60)
+#   bridge share <path> < file    write one file into the context folder, then sync
+#   bridge pull [path]            sync, then list the context folder (or print one file)
+#   bridge files                  list what sync would send, after the deny-list and size caps
+# On the server:  bridge reply "<text>"  (answer the local session)   bridge log  (recent bridge actions)
+# The same file, installed on the server as ~/.local/bin/bridge-serve, is the SSH entry point / forced command.
+# shellcheck disable=SC2088  # "~/..." is expanded by the server, not here
+set -u
+umask 077   # logs, messages, outbox, inbox and synced files: owner only
+VERSION=1
+MAX_FILE=1048576      # 1 MB per file
+MAX_TOTAL=52428800    # 50 MB per sync
+MAX_MSG=8192
+MAX_ENTRIES=5000     # per archive
+DIR=${BRIDGE_DIR:-$HOME/pierce-bridge}
+
+die() { echo "bridge: $*" >&2; exit 1; }
+
+# ---------- shared by both sides: the deny-list, the size caps, safe tar ----------
+denied() ( # denied <relative path>: true if any part of it is on the deny-list (case-insensitive)
+  case $1 in *[[:cntrl:]]*|/*) exit 0;; esac
+  IFS=/; set -f   # .secrets/ is covered by *secret*, .git-credentials by *credential*. Names only: contents are not checked.
+  for part in $(printf '%s' "$1" | tr 'A-Z' 'a-z'); do
+    case $part in
+      ..|.env*|*.pem|*.key|id_*|*secret*|*.p12|*.pfx|.ssh|*credential*|*token*|.git) exit 0;;
+      .netrc|.npmrc|.pypirc|.pgpass|.aws|.docker|kubeconfig*|*.kdbx|*.ppk|*.gpg|*.asc|.htpasswd) exit 0;;
+    esac
+  done
+  exit 1 )
+
+list_files() { # list_files <dir>: files that may sync (relative paths); skipped big files are noted on stderr
+  [ -d "$1" ] || return 0
+  ( cd "$1" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do
+      denied "$f" && continue
+      s=$(wc -c < "$f" | tr -d ' ')
+      [ "$s" -le $MAX_FILE ] || { echo "bridge: not synced: $f ($s bytes, over the 1 MB cap)" >&2; continue; }
+      printf '%s\n' "$f"
+    done )
+}
+
+pack() { # pack <dir> <list> <out.tar>: tar the listed files, refusing anything over the 50 MB total cap
+  total=0
+  while IFS= read -r f; do total=$((total + $(wc -c < "$1/$f"))); done < "$2"
+  [ "$total" -le $MAX_TOTAL ] || { echo "bridge: refusing to sync: $total bytes is over the 50 MB total cap" >&2; return 1; }
+  COPYFILE_DISABLE=1 tar -cf "$3" -C "$1" -T "$2"
+}
+
+unpack() { # unpack <tar> <dir>: plain uncompressed tar of files and folders, caps checked BEFORE anything is extracted
+  if [ -n "$(head -c 512 "$1" | tr -d '\000' | head -c 1)" ] && [ "$(dd if="$1" bs=1 skip=257 count=5 2>/dev/null)" != ustar ]; then
+    echo "bridge: refusing archive: not a plain tar (compressed archives are refused)" >&2; return 1; fi
+  tar -tvf "$1" > "$1.v" 2>/dev/null || { echo "bridge: not a valid archive" >&2; return 1; }
+  if cut -c1 "$1.v" | grep -qv '^[-d]$'; then echo "bridge: refusing archive: it holds links or special files" >&2; return 1; fi
+  if tar -tf "$1" | grep -qE '^/|(^|/)\.\.(/|$)|\\|:'; then echo "bridge: refusing archive: unsafe paths" >&2; return 1; fi
+  # sizes from the listing: GNU tar puts user/group in field 2 and the size in 3; bsdtar has links, user, group, size in 5
+  why=$(awk -v mf=$MAX_FILE -v mt=$MAX_TOTAL -v me=$MAX_ENTRIES '{ s = ($2 ~ /\//) ? $3 : $5; n++; t += s; if (s + 0 > mf) big = 1 }
+    END { if (n > me) print "over " me " entries"; else if (big) print "a file over the 1 MB cap"; else if (t > mt) print "over the 50 MB total cap" }' "$1.v")
+  [ -z "$why" ] || { echo "bridge: refusing archive: $why" >&2; return 1; }
+  mkdir -p "$2" && tar -xf "$1" -C "$2" && chmod -R u+rwX "$2"
+}
+
+safe_dest() ( # safe_dest <root> <relative path>: no folder on the way is a link, and it resolves inside root
+  p=$1; IFS=/; set -f
+  for part in $(dirname "$2"); do [ "$part" = . ] && continue; p=$p/$part; [ -L "$p" ] && exit 1; done
+  d=$(dirname "$1/$2"); [ -d "$d" ] || exit 0
+  command -v realpath >/dev/null || exit 0
+  r=$(realpath "$1"); case $(realpath "$d") in "$r"|"$r"/*) exit 0;; esac; exit 1 )
+cleanup() { chmod -R u+rwX "$1" 2>/dev/null; rm -rf "$1"; }
+# strip terminal escapes / control characters (C0, DEL, C1) before printing text from the other side
+clean() { LC_ALL=C tr -d '\000-\010\013-\037\177' | LC_ALL=C sed "s/$(printf '\302')[$(printf '\200')-$(printf '\237')]//g"; }
+
+hash() { [ -f "$1" ] || return 0; { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1; }
+
+# ---------- server side (invoked as bridge-serve) ----------
+server_env() {
+  [ -f "$HOME/.local/bin/lk-config" ] && . "$HOME/.local/bin/lk-config"
+  : "${LK_HOME:=$HOME/.pierce-skill-kit}" "${LK_HUB:=hub}" "${LK_LEAD_WINDOW:=Lead}"
+  LK_LEAD="$LK_HUB:$LK_LEAD_WINDOW"
+  SHARED=${BRIDGE_SHARED:-$LK_HOME/shared}; STATE=$LK_HOME/bridge
+  mkdir -p "$STATE" "$SHARED"
+}
+slog() { c=${SSH_CLIENT:-local}; printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "${c%% *}" "$*" >> "$LK_HOME/bridge.log"; }
+refuse() { slog "REFUSED $*"; echo "bridge-serve: refused: $*" >&2; exit 3; }
+valid_name() { case $1 in ''|.*|*[!A-Za-z0-9._-]*) return 1;; esac; [ ${#1} -le 40 ]; }
+
+serve_ping() { tmux has-session -t "$LK_LEAD" 2>/dev/null && w=running || w="not running"; echo "bridge-serve $VERSION ok; lead window $LK_LEAD $w"; }
+
+serve_send() { # stdin: the message. Typed into the lead like `report` does, under the same lock.
+  msg=$(head -c $MAX_MSG | tr '\r\n\t' '   ' | tr -d '\000-\037\177')
+  [ -n "$(printf '%s' "$msg" | tr -d ' ')" ] || refuse "empty message"
+  printf '%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$1" "$msg" >> "$STATE/messages.tsv"
+  text="[BRIDGE from $1] $msg (answer with: bridge reply \"...\")"
+  cmd=$(tmux display -p -t "$LK_LEAD" '#{pane_current_command}' 2>/dev/null); pid=$(tmux display -p -t "$LK_LEAD" '#{pane_pid}' 2>/dev/null)
+  # a shell with no child process is a bare prompt (Claude exited): typing would run the message as a command.
+  # A shell WITH a child is a wrapper running Claude (how `lead` starts it), so that is fine.
+  fg=$(sed 's/.*) //' "/proc/$pid/stat" 2>/dev/null | cut -d' ' -f6)   # the terminal's foreground process (tpgid)
+  case $cmd in sh|bash|zsh|dash|fish|ksh|-sh|-bash|-zsh) grep -qs "^PPid:[[:space:]]*${fg:-$pid}\$" /proc/[0-9]*/status || cmd="bare:$cmd";; esac
+  case $cmd in bare:*) cmd=${cmd#bare:}
+    slog "send $1: held, lead pane is a plain shell ($cmd)"
+    echo "bridge-serve: not typed: the lead window is a plain $cmd shell, not Claude. Kept in $STATE/messages.tsv" >&2; exit 4;;
+  esac
+  ( flock -w 20 9; tmux send-keys -t "$LK_LEAD" -l "$text" && sleep 0.7 && tmux send-keys -t "$LK_LEAD" Enter && sleep 0.5 ) \
+    9>"$LK_HOME/.report.lock" && echo "delivered to the lead ($LK_LEAD)" || { echo "bridge-serve: logged, but the lead window $LK_LEAD is not running" >&2; exit 1; }
+}
+
+serve_fetch() { [ -f "$STATE/outbox.tsv" ] && tail -n +$(($1 + 1)) "$STATE/outbox.tsv"; return 0; }
+
+serve_sync() { # stdin: tar of the client's folder. stdout: tar of the merged shared folder. Conflicts keep both.
+  name=$1; t=$(mktemp -d); trap 'cleanup "$t"' EXIT
+  head -c $((MAX_TOTAL + 10485760)) > "$t/in.tar"
+  unpack "$t/in.tar" "$t/l" || exit 1
+  exec 8>"$STATE/sync.lock"; flock -w 60 8 || refuse "sync busy"
+  [ -f "$LK_HOME/reports.tsv" ] && cp "$LK_HOME/reports.tsv" "$SHARED/reports.tsv"   # the kit's reports log, read-mostly
+  base=$STATE/base-$name.tsv; touch "$base"
+  list_files "$t/l" > "$t/lf"; list_files "$SHARED" > "$t/sf" 2>/dev/null
+  LC_ALL=C sort -u "$t/lf" "$t/sf" > "$t/all"
+  while IFS= read -r f; do
+    hl=; grep -qxF -- "$f" "$t/lf" && hl=$(hash "$t/l/$f")
+    hs=; grep -qxF -- "$f" "$t/sf" && hs=$(hash "$SHARED/$f")
+    hb=$(awk -F'\t' -v f="$f" '$1 == f { print $2 }' "$base")
+    if [ "$hl" = "$hs" ]; then :
+    elif ! safe_dest "$SHARED" "$f"; then   # never write through a link; keep the content under a flat name instead
+      b=blocked-$name-$(printf '%s' "$f" | tr / _); [ -n "$hl" ] && cp "$t/l/$f" "$SHARED/$b"
+      slog "sync $name: $f not written (linked folder)"; echo "bridge: $f: a folder on its path is a link on the server; saved as $b" >&2
+    elif [ -z "$hl" ]; then [ "$hs" = "$hb" ] && rm -f "$SHARED/$f" && slog "sync $name: deleted $f"
+    elif [ -z "$hs" ] && [ "$hl" = "$hb" ]; then :            # deleted here, unchanged there: stays deleted
+    elif [ -z "$hs" ] && [ -e "$SHARED/$f" ]; then             # an unsyncable (big) file has that name here
+      cp "$t/l/$f" "$SHARED/$f.conflict-$name-$(date -u +%Y%m%dT%H%M%SZ)"; echo "bridge: conflict: $f (kept both)" >&2
+    elif [ -z "$hs" ] || [ "$hs" = "$hb" ]; then mkdir -p "$(dirname "$SHARED/$f")" && cp "$t/l/$f" "$SHARED/$f"
+    elif [ "$hl" = "$hb" ]; then :                             # only the server changed it
+    else c="$f.conflict-$name-$(date -u +%Y%m%dT%H%M%SZ)"; cp "$t/l/$f" "$SHARED/$c"
+      slog "sync $name: conflict $f -> kept both ($c)"; echo "bridge: conflict: $f changed on both sides; yours is $c" >&2
+    fi
+  done < "$t/all"
+  list_files "$SHARED" > "$t/out" 2>/dev/null
+  while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(hash "$SHARED/$f")"; done < "$t/out" > "$base"
+  pack "$SHARED" "$t/out" "$t/out.tar" && cat "$t/out.tar"
+}
+
+serve_add_key() { # stdin: one forced-command authorized_keys line (only reachable from a normal shell login)
+  l=$(head -c 4096 | head -n 1)
+  case $l in 'command="~/.local/bin/bridge-serve",restrict ssh-'*) ;; *) refuse "not a bridge key line";; esac
+  mkdir -p ~/.ssh && chmod 700 ~/.ssh && touch ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+  grep -qxF -- "$l" ~/.ssh/authorized_keys || printf '%s\n' "$l" >> ~/.ssh/authorized_keys
+  slog "add-key"; echo "bridge key added (forced command)"
+}
+
+serve() {
+  server_env
+  if [ $# -eq 0 ]; then   # forced command: the only input is what the client asked for
+    [ -n "${SSH_ORIGINAL_COMMAND:-}" ] || refuse "no shell: this key only runs bridge actions"
+    set -f; set -- $SSH_ORIGINAL_COMMAND; set +f
+    case ${1:-} in bridge-serve|*/bridge-serve) shift;; esac
+    remote=1
+  else remote=0; fi
+  act=${1:-}; arg=${2:-}
+  [ $# -le 2 ] || refuse "too many words: $*"
+  case $act in
+    send|sync) valid_name "$arg" || refuse "bad name: $arg";;
+    fetch) case $arg in ''|*[!0-9]*) refuse "bad count: $arg";; esac;;
+    ping) [ -z "$arg" ] || refuse "ping takes no argument";;
+    add-key) [ $remote = 0 ] || refuse "add-key needs a normal login";;
+    *) refuse "not a bridge action: $act";;
+  esac
+  slog "$act $arg"
+  case $act in add-key) serve_add_key;; *) "serve_$act" "$arg";; esac
+}
+
+# ---------- local side ----------
+load_config() {
+  [ -f "$DIR/config" ] || die "not set up yet: run  bridge setup me@my-server"
+  BRIDGE_VPS=; BRIDGE_NAME=; BRIDGE_KEY=; BRIDGE_CONTEXT=$DIR/context
+  while IFS='=' read -r k v; do
+    case $k in BRIDGE_VPS) BRIDGE_VPS=$v;; BRIDGE_NAME) BRIDGE_NAME=$v;; BRIDGE_KEY) BRIDGE_KEY=$v;; BRIDGE_CONTEXT) BRIDGE_CONTEXT=$v;; esac
+  done < "$DIR/config"
+  [ -n "$BRIDGE_VPS" ] && [ -n "$BRIDGE_NAME" ] || die "config $DIR/config is missing BRIDGE_VPS or BRIDGE_NAME"
+  mkdir -p "$BRIDGE_CONTEXT"
+}
+sshb() { # sshb <host> <remote command...>: key auth only, never a password prompt
+  h=$1; shift
+  if [ -n "${BRIDGE_KEY:-}" ]; then ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -i "$BRIDGE_KEY" -o IdentitiesOnly=yes "$h" "$@"
+  else ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$h" "$@"; fi
+}
+remote() { sshb "$BRIDGE_VPS" "~/.local/bin/bridge-serve $*"; }
+
+do_sync() {
+  t=$(mktemp -d)
+  list_files "$BRIDGE_CONTEXT" > "$t/up"
+  pack "$BRIDGE_CONTEXT" "$t/up" "$t/up.tar" || { cleanup "$t"; return 1; }
+  remote sync "$BRIDGE_NAME" < "$t/up.tar" > "$t/down.tar" || { cleanup "$t"; die "sync failed"; }
+  unpack "$t/down.tar" "$t/d" || { cleanup "$t"; return 1; }
+  list_files "$t/d" > "$t/down"
+  # ponytail: a file edited locally during the few seconds of a sync is overwritten; next sync would not see it
+  while IFS= read -r f; do grep -qxF -- "$f" "$t/down" || rm -f "$BRIDGE_CONTEXT/$f"; done < "$t/up"
+  while IFS= read -r f; do
+    safe_dest "$BRIDGE_CONTEXT" "$f" || { b=blocked-$(printf '%s' "$f" | tr / _); cp "$t/d/$f" "$BRIDGE_CONTEXT/$b"
+      echo "bridge: $f: a folder on its path is a link here; saved as $b" >&2; continue; }
+    mkdir -p "$(dirname "$BRIDGE_CONTEXT/$f")" && cp "$t/d/$f" "$BRIDGE_CONTEXT/$f"
+  done < "$t/down"
+  echo "synced $(wc -l < "$t/down" | tr -d ' ') files: $BRIDGE_CONTEXT <-> $BRIDGE_VPS"
+  cleanup "$t"
+}
+
+safe_rel() { case $1 in ''|/*|*\\*|*:*) return 1;; esac; ! denied "$1" && safe_dest "$BRIDGE_CONTEXT" "$1"; }
+
+setup() {
+  vps=${1:-}; [ -n "$vps" ] || die "usage: bridge setup me@my-server [--name N] [--harden]"; shift
+  name=$(hostname 2>/dev/null | cut -d. -f1 | tr -cd 'A-Za-z0-9._-' | cut -c1-40); harden=0
+  while [ $# -gt 0 ]; do case $1 in --name) name=$2; shift;; --harden) harden=1;; *) die "unknown option $1";; esac; shift; done
+  valid_name "$name" || die "pick a name with --name (letters, digits, . _ -)"
+  here=$(cd "$(dirname "$0")" && pwd)
+  echo "1/4 checking key login to $vps"
+  out=$(sshb "$vps" 'echo bridge-shell-ok' < /dev/null 2>&1)
+  case $out in *bridge-shell-ok*) ;; *) echo "$out" >&2
+    die "key login to $vps failed. Set up a key first:  ssh-keygen -t ed25519  then  ssh-copy-id $vps";; esac
+  echo "2/4 installing bridge-serve on $vps (~/.local/bin/bridge-serve)"
+  sshb "$vps" 'mkdir -p ~/.local/bin && cat > ~/.local/bin/bridge-serve.new && chmod 755 ~/.local/bin/bridge-serve.new && mv ~/.local/bin/bridge-serve.new ~/.local/bin/bridge-serve && cp ~/.local/bin/bridge-serve ~/.local/bin/bridge' < "$here/bridge" \
+    || die "could not install bridge-serve"
+  sshb "$vps" '~/.local/bin/bridge-serve ping' < /dev/null || die "bridge-serve does not run on $vps"
+  echo "3/4 writing $DIR"
+  mkdir -p "$DIR/bin" "$DIR/context"
+  cp "$here/bridge" "$DIR/bin/bridge" && cp "$here/mcp.mjs" "$DIR/bin/mcp.mjs" && chmod 755 "$DIR/bin/bridge"
+  key=
+  if [ $harden = 1 ]; then
+    key=$DIR/bridge_key
+    [ -f "$key" ] || ssh-keygen -q -t ed25519 -N '' -C "pierce-bridge-$name" -f "$key" || die "ssh-keygen failed"
+    line="command=\"~/.local/bin/bridge-serve\",restrict $(cat "$key.pub")"
+    echo "This line will be added to ~/.ssh/authorized_keys on $vps. The new key can't open a shell or run commands,"
+    echo "but what it sends (messages, synced files) reaches the lead, a Claude session with a full shell. A stolen"
+    echo "bridge key can still try to talk the lead into things: treat bridge messages and files as untrusted input."
+    echo "  $line"
+    printf 'Add it? [y/N] '; read -r a
+    if [ "$a" = y ] || [ "$a" = Y ]; then
+      printf '%s\n' "$line" | sshb "$vps" '~/.local/bin/bridge-serve add-key' || die "could not add the key"
+      BRIDGE_KEY=$key sshb "$vps" '~/.local/bin/bridge-serve ping' < /dev/null || die "the bridge key does not work"
+    else key=; echo "skipped: the bridge will use your normal login (full shell access)"; fi
+  fi
+  [ -n "$key" ] || echo "note: without --harden the bridge uses your normal SSH login, which has full shell access on $vps"
+  printf 'BRIDGE_VPS=%s\nBRIDGE_NAME=%s\nBRIDGE_KEY=%s\nBRIDGE_CONTEXT=%s\n' "$vps" "$name" "$key" "$DIR/context" > "$DIR/config"
+  echo "4/4 registering the MCP server with Claude Code"
+  cmd="claude mcp add -s user bridge -- node $DIR/bin/mcp.mjs"
+  case "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" in "$HOME"/*) cfg_ok=1;; *) cfg_ok=0;; esac
+  if command -v claude >/dev/null && command -v node >/dev/null && [ $cfg_ok = 1 ]; then
+    claude mcp add -s user bridge -- node "$DIR/bin/mcp.mjs" || echo "  (already added? remove it first: claude mcp remove -s user bridge)"
+  else echo "  Claude Code / node not found here (or CLAUDE_CONFIG_DIR is outside HOME). Run this yourself:"; echo "  $cmd"; fi
+  echo "done. Add to your PATH:  export PATH=\"$DIR/bin:\$PATH\"   then try:  bridge send \"hello from $name\""
+}
+
+main() {
+  case $(basename "$0") in bridge-serve) serve "$@"; exit;; esac
+  cmd=${1:-}; [ $# -gt 0 ] && shift
+  case $cmd in
+    setup) setup "$@";;
+    send) load_config
+      if [ $# -gt 0 ]; then printf '%s' "$*" | remote send "$BRIDGE_NAME"; else remote send "$BRIDGE_NAME"; fi;;
+    inbox) load_config
+      n=$(cat "$DIR/.fetched" 2>/dev/null || echo 0); t=$(mktemp)
+      remote fetch "$n" < /dev/null > "$t" || { rm -f "$t"; die "could not reach $BRIDGE_VPS"; }
+      cat "$t" >> "$DIR/inbox.txt"; echo $((n + $(wc -l < "$t"))) > "$DIR/.fetched"; rm -f "$t"
+      r=$(cat "$DIR/.read" 2>/dev/null || echo 0); [ "${1:-}" = --all ] && r=0
+      new=$(tail -n +$((r + 1)) "$DIR/inbox.txt" | tr '\t' ' ' | clean)
+      if [ -n "$new" ]; then printf '%s\n' "$new"; else echo "(no new messages)"; fi
+      wc -l < "$DIR/inbox.txt" | tr -d ' ' > "$DIR/.read";;
+    sync) load_config
+      if [ "${1:-}" = --watch ]; then n=${2:-60}; echo "syncing every $n s (Ctrl+C stops)"; while :; do do_sync; sleep "$n"; done; fi
+      do_sync;;
+    share) load_config; p=${1:-}; safe_rel "$p" || die "refused path: $p (empty, absolute, .. or on the deny-list)"
+      t=$(mktemp); head -c $((MAX_FILE + 1)) > "$t"
+      [ "$(wc -c < "$t")" -le $MAX_FILE ] || { rm -f "$t"; die "over the 1 MB cap"; }
+      mkdir -p "$(dirname "$BRIDGE_CONTEXT/$p")" && mv "$t" "$BRIDGE_CONTEXT/$p" && echo "wrote $p" && do_sync;;
+    pull) load_config; do_sync >&2 || exit 1
+      if [ -n "${1:-}" ]; then safe_rel "$1" && [ -f "$BRIDGE_CONTEXT/$1" ] || die "no such file: $1"; cat "$BRIDGE_CONTEXT/$1"
+      else list_files "$BRIDGE_CONTEXT"; fi;;
+    files) load_config; list_files "$BRIDGE_CONTEXT";;
+    reply) server_env; [ $# -gt 0 ] || die "usage: bridge reply \"<text>\""
+      printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$(printf '%s' "$*" | tr '\r\n\t' '   ')" >> "$STATE/outbox.tsv"
+      slog "reply"; echo "queued for the local session (it shows up in: bridge inbox)";;
+    log) server_env; tail -n "${1:-20}" "$LK_HOME/bridge.log" 2>/dev/null;;
+    *) sed -n 2,11p "$0"; exit 2;;
+  esac
+}
+main "$@"

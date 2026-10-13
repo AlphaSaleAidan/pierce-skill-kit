@@ -18,8 +18,8 @@
   <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
 
-> **Latest (v0.2.0):** separate Claude accounts with per-account tabs and usage (`claude-acct`); update notes and releases.
-> **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
+> **Latest (v0.3.0):** the bridge: Claude Code on your own computer messages the server lead and shares a context folder, over SSH only.
+> **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
 Run many Claude Code sessions at once without losing track of them. One **lead** session manages a set of
@@ -122,6 +122,7 @@ projects, sessions, PRs, services), **statusline**, the **lead-guard**, **review
 - [docs/memory-and-context.md](docs/memory-and-context.md): file memory, the index, and keeping context across long sessions
 - [docs/api-stack.md](docs/api-stack.md): example services + env var names, and how to store keys by path
 - [docs/windows.md](docs/windows.md): Windows Terminal + ssh into your server, a `lead` shortcut, a tab per project
+- [docs/bridge.md](docs/bridge.md): let Claude Code on your own computer (Windows/Mac/Linux) message the lead and share context, over SSH only
 - [docs/accounts.md](docs/accounts.md): separate Claude accounts (personal / work), per-account tabs and usage
 - [docs/macos.md](docs/macos.md): optional Terminal.app helpers (macOS-only)
 

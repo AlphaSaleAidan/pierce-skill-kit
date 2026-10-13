@@ -3,6 +3,20 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.3.0 (2026-10-13)
+### Added
+- **The bridge** ([docs/bridge.md](docs/bridge.md)): Claude Code on your own Windows / Mac / Linux computer can message
+  the lead on your server (`bridge send`), get replies (`bridge inbox`), and keep a shared context folder in sync
+  (`bridge sync`), over SSH only. Comes with an MCP server so your local Claude can do it itself, a deny-list so
+  secrets never sync, size caps, and an optional locked-down key (`--harden`). Messages and synced files reach a
+  Claude session that has a full shell, so treat them as untrusted input; the docs explain.
+
+### Fixed
+- `get.sh` no longer fails when the kit's folder isn't on a branch; CI runs on pushes to main.
+
+**Run this:** `lead update`, then on your own computer: `sh mods/bridge/bridge setup me@my-server`
+(Windows: `powershell -ExecutionPolicy Bypass -File mods\bridge\bridge.ps1 setup me@my-server`)
+
 ## v0.2.0 (2026-10-13)
 ### Added
 - **Separate Claude accounts** (`claude-acct`): personal / work accounts side by side with their own logins, your
