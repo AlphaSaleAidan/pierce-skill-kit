@@ -5,7 +5,7 @@
 set -e
 apt-get update -qq >/dev/null && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq sudo curl ca-certificates git >/dev/null
 useradd -m -s /bin/bash dev && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev
-cp -r /kit /tmp/src && git -C /tmp/src init -q 2>/dev/null; git -C /tmp/src add -A >/dev/null 2>&1; \
+cp -r /kit /tmp/src && rm -rf /tmp/src/.git && git -C /tmp/src init -q -b main 2>/dev/null; git -C /tmp/src add -A >/dev/null 2>&1; \
   git -C /tmp/src -c user.name=t -c user.email=t@example.com commit -qm t >/dev/null 2>&1 || true
 chown -R dev /tmp/src
 su - dev -c '

@@ -63,6 +63,7 @@ case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$P
 
 # ---------- 3. the kit ----------
 if [ -d "$DIR/.git" ] && [ "${PSK_NO_PULL:-0}" = 1 ]; then say "Using the kit in $DIR as is"
+elif [ -d "$DIR/.git" ] && ! git -C "$DIR" symbolic-ref -q HEAD >/dev/null; then say "The kit in $DIR is not on a branch; using it as is (git -C $DIR checkout main to update)"
 elif [ -d "$DIR/.git" ]; then say "Updating the kit"; run git -C "$DIR" pull -q --ff-only
 else say "Cloning the kit"; run git clone -q "$REPO" "$DIR"; fi
 say "Running install.sh"
