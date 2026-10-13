@@ -59,6 +59,7 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 - [docs/model-routing.md](docs/model-routing.md): which model for which job, and why it saves tokens
 - [docs/loops.md](docs/loops.md): grading loops and wait loops that don't run away
 - [docs/report-protocol.md](docs/report-protocol.md) · [docs/briefs.md](docs/briefs.md) · [docs/skill-routing.md](docs/skill-routing.md)
+- [docs/security.md](docs/security.md): agent security, rate-limit recipes (Express, Next.js, nginx), app basics, SOC 2 audit-readiness
 - [docs/safety-rules.md](docs/safety-rules.md): what the tools enforce vs what's on Claude, plus the optional lead hook
 - [docs/prompting.md](docs/prompting.md): briefs, talking to Claude, graders, subagents, creative prompts, dictation
 - [docs/memory-and-context.md](docs/memory-and-context.md): file memory, the index, and keeping context across long sessions
