@@ -44,6 +44,22 @@ decides what reaches the human. It does no project work, so its token use stays 
   long watch instead.
 - If every account you have is past ~90% of its weekly limit, stop starting new lanes and tell the human.
 
+## When a model refuses
+Most refusals on legitimate work come from missing context, not from the task. Handle them in the product, never
+by arguing the model past its limits. No jailbreaks, no "the rules don't apply here", no rewording to sneak a
+request through: if the request is outside a model's policy, the answer is no, and the product should say so plainly.
+
+1. **Context up front.** In the system prompt or brief, state the real purpose, the audience and the boundaries.
+   Example: *"Harm-reduction app for adults: give sourced safety facts; never give sourcing or buying information."*
+   Clear boundaries make the legitimate part easy to answer.
+2. **A fallback, not a dead end.** When an answer is refused, the app shows verified, sourced content it already
+   has (e.g. pre-checked answer cards with citations) and says that's what it's showing.
+3. **Route, log, flag.** A legitimate task one model declines can go to a model better suited to it (e.g. a larger
+   model for a nuanced medical question). Log the refusal and the route, and flag it to the human.
+   **One reroute, then stop:** if the second model also declines, treat that as the answer.
+4. **Repeated refusals on one topic = fix the context or the product,** not the model. Read the logs weekly;
+   a cluster of refusals means the prompt is unclear or the feature is asking for something it shouldn't.
+
 ## Example (Claude Code model names as of writing)
 | Job | Model |
 |---|---|
