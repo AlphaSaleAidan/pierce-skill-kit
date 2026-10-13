@@ -31,14 +31,16 @@ claude-tab ~/code/acme-app -n acme-app    # open a project tab; brief it, it rep
 
 <table>
 <tr>
-<td width="33%" valign="top"><img src="assets/icons/tabs.svg" width="28" alt=""><br><b>One lead, many tabs</b><br>Each project gets its own Claude Code tab; the lead routes work and refuses duplicates.</td>
-<td width="33%" valign="top"><img src="assets/icons/report.svg" width="28" alt=""><br><b>Reports, one path</b><br><code>report</code> logs every result with proof and types it straight into the lead.</td>
-<td width="33%" valign="top"><img src="assets/icons/watch.svg" width="28" alt=""><br><b>Nothing silently stuck</b><br>A watchdog flags idle tabs, but not the ones waiting on you.</td>
+<td width="50%" valign="top"><img src="assets/icons/tabs.svg" width="28" alt=""><br><b>One lead, many tabs</b><br>Each project gets its own Claude Code tab; the lead routes work and refuses duplicates.</td>
+<td width="50%" valign="top"><img src="assets/icons/report.svg" width="28" alt=""><br><b>Reports, one path</b><br><code>report</code> logs every result with proof and types it straight into the lead.</td>
 </tr>
 <tr>
-<td valign="top"><img src="assets/icons/route.svg" width="28" alt=""><br><b>Model routing</b><br>Strongest model for hard calls and grading; cheaper ones for lanes and lookups.</td>
-<td valign="top"><img src="assets/icons/shield.svg" width="28" alt=""><br><b>Rules that hold</b><br>Ask before sends, prove before done, no prod without you. One page, with the why.</td>
-<td valign="top"><img src="assets/icons/queue.svg" width="28" alt=""><br><b>Box-friendly</b><br>Heavy jobs queue two at a time, low priority, with a RAM guard.</td>
+<td width="50%" valign="top"><img src="assets/icons/watch.svg" width="28" alt=""><br><b>Nothing silently stuck</b><br>A watchdog flags idle tabs, but not the ones waiting on you.</td>
+<td width="50%" valign="top"><img src="assets/icons/route.svg" width="28" alt=""><br><b>Model routing</b><br>Strongest model for hard calls and grading; cheaper ones for lanes and lookups.</td>
+</tr>
+<tr>
+<td width="50%" valign="top"><img src="assets/icons/shield.svg" width="28" alt=""><br><b>Rules that hold</b><br>Ask before sends, prove before done, no prod without you. One page, with the why.</td>
+<td width="50%" valign="top"><img src="assets/icons/queue.svg" width="28" alt=""><br><b>Box-friendly</b><br>Heavy jobs queue two at a time, low priority, with a RAM guard.</td>
 </tr>
 </table>
 
