@@ -64,4 +64,4 @@ if ask "Install everything else this setup runs (plugins, Ponytail, MCP servers,
   if [ "$mode" = yes ]; then sh mods/extras.sh --yes; else sh mods/extras.sh; fi
 fi
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "add to your shell profile: export PATH=\"$BIN:\$PATH\"";; esac
-echo "done. Start the lead with:  lead"
+echo "done. Start the lead with:  lead     (on Windows: see docs/windows.md)"
