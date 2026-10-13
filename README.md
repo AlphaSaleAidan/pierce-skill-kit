@@ -54,6 +54,13 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
 | `lead-daily [--summary]` | end-of-day digest of reports, open orders, briefs and decisions |
 
+## Skills
+Beyond the two lead/tab skills, 18 skills we wrote ourselves, grouped and indexed in [SKILLS.md](SKILLS.md):
+quality and grading (video QC, lip-sync/gaze QC, phone-agent QA), video and 3D production (commercial pipeline,
+Blender sets from storyboards, green-screen comps, kinetic type, beat-synced overlays, logo fixes, voice conversion
+with consent), design and web (site build), decks, Codex hand-offs, and credit discipline for paid generation.
+Plus recommended third-party skills (linked, not copied) and a router template: [templates/skill-router.md](templates/skill-router.md).
+
 ## Mods
 Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
 (live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:

@@ -15,6 +15,7 @@ echo "LK_CLAUDE=cat" >> ~/.config/pierce-skill-kit/config
 mkdir -p ~/alpha ~/beta
 test -f ~/.claude/skills/terminal-lead/SKILL.md && test -f ~/.claude/skills/project-tab/SKILL.md || fail "skills not installed"
 grep -q "BEGIN pierce-skill-kit rules" ~/.claude/CLAUDE.md || fail "rules not appended"
+[ "$(ls ~/.claude/skills | wc -l)" = "$(ls /tmp/kit/skills | wc -l)" ] && test -f ~/.claude/skills/phone-qa/SKILL.md && [ "$(find ~/.claude/skills/phone-qa -type f | wc -l)" -gt 1 ] || fail "extra skills not installed whole"
 ./install.sh --yes >/dev/null; [ "$(grep -c "BEGIN pierce-skill-kit rules" ~/.claude/CLAUDE.md)" = 1 ] || fail "re-install duplicated the rules"
 lead -d
 claude-tab ~/alpha -n alpha

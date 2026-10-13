@@ -24,13 +24,21 @@ mkdir -p "$BIN" "$CFG" "$CLAUDE_DIR/skills"
 for f in bin/*; do if [ -f "$f" ]; then put "$f" "$BIN/$(basename "$f")"; fi; done
 chmod +x "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily
 echo "tools  -> $BIN"
-for s in skills/*/; do n=$(basename "$s"); mkdir -p "$CLAUDE_DIR/skills/$n"; put "$s/SKILL.md" "$CLAUDE_DIR/skills/$n/SKILL.md"; done
+skill() { # skill <name>: copy a whole skill folder; an existing different copy is kept as <name>.bak
+  d="$CLAUDE_DIR/skills/$1"
+  if [ -d "$d" ] && ! diff -rq "skills/$1" "$d" >/dev/null 2>&1; then rm -rf "$d.bak"; mv "$d" "$d.bak"; fi
+  mkdir -p "$d" && cp -r "skills/$1/." "$d/"; }
+skill terminal-lead; skill project-tab
 echo "skills -> $CLAUDE_DIR/skills (terminal-lead, project-tab)"
 [ -f "$CFG/config" ] || cp config.example "$CFG/config"
 put tmux/pierce-skill-kit.tmux.conf "$CFG/pierce-skill-kit.tmux.conf"
 mkdir -p "$CFG/hooks"; put hooks/lead-no-worker-agents.sh "$CFG/hooks/lead-no-worker-agents.sh"; chmod +x "$CFG/hooks/lead-no-worker-agents.sh"
 echo "config -> $CFG/config"
 
+if ask "Install the other $(($(ls -d skills/*/ | wc -l) - 2)) skills (video/3D production, QA and grading, decks, web; see SKILLS.md)?"; then
+  for s in skills/*/; do n=$(basename "$s"); case $n in terminal-lead|project-tab) ;; *) skill "$n";; esac; done
+  echo "skills -> all of skills/ (index: SKILLS.md)"
+fi
 if ask "Use the Pierce Skill Kit tmux settings (mouse scroll/copy, LEADER marker)?"; then
   grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" || echo "source-file $CFG/pierce-skill-kit.tmux.conf" >> "$HOME/.tmux.conf"
   echo "tmux   -> ~/.tmux.conf sources it"

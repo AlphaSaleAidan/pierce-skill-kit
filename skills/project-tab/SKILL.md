@@ -1,6 +1,6 @@
 ---
-name: project-tab
-description: Operating principles for every PROJECT TAB working under a lead session: how to plan, use subagents, hit the quality bar at a good pace, prove work, and report. Use at the start of every brief and whenever deciding whether to spawn subagents.
+name: "project-tab"
+description: "Operating principles for every PROJECT TAB working under a lead session: how to plan, use subagents, hit the quality bar at a good pace, prove work, and report. Use at the start of every brief and whenever deciding whether to spawn subagents."
 ---
 
 # Project tab: operating principles
