@@ -1,0 +1,36 @@
+--- a/.claude/helpers/auto-memory-hook.mjs
++++ b/.claude/helpers/auto-memory-hook.mjs
+@@ -132,11 +132,18 @@
+   } catch { return null; }
+ }
+ 
++// pierce-kit: honor CLAUDE_CONFIG_DIR. Claude Code keeps auto-memory under
++// $CLAUDE_CONFIG_DIR/projects when it is set (one config dir per account), so
++// the bridge must look there too, not only in ~/.claude.
++function claudeHome() {
++  return process.env.CLAUDE_CONFIG_DIR || join(process.env.HOME || process.env.USERPROFILE || homedir(), '.claude');
++}
++
+ function worktreeMemoryDir() {
+   const main = mainCheckoutRoot(PROJECT_ROOT);
+-  if (!main) return undefined;
+-  const key = main.split(sep).join('/').replace(/[\/_:]/g, '-');
+-  return join(process.env.HOME || process.env.USERPROFILE || homedir(), '.claude', 'projects', key, 'memory');
++  if (!main && !process.env.CLAUDE_CONFIG_DIR) return undefined;
++  const key = (main || PROJECT_ROOT).split(sep).join('/').replace(/[\/_:]/g, '-');
++  return join(claudeHome(), 'projects', key, 'memory');
+ }
+ 
+ // ============================================================================
+--- a/.claude/helpers/intelligence.cjs
++++ b/.claude/helpers/intelligence.cjs
+@@ -439,7 +439,8 @@
+   // Search for auto-memory directories
+   const candidates = [
+     // Claude Code auto-memory (project-scoped)
+-    path.join(require('os').homedir(), '.claude', 'projects'),
++    // pierce-kit: honor CLAUDE_CONFIG_DIR (per-account Claude config dir)
++    path.join(process.env.CLAUDE_CONFIG_DIR || path.join(require('os').homedir(), '.claude'), 'projects'),
+     // Local project memory
+     path.join(cwd, '.claude-flow', 'memory'),
+     path.join(cwd, '.claude', 'memory'),

@@ -57,7 +57,8 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 ## Mods
 Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
 (live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
-projects, sessions, PRs, services), **statusline**, and the **lead-guard**, **review-gate** and **mail-no-links** hooks.
+projects, sessions, PRs, services), **statusline**, the **lead-guard**, **review-gate** and **mail-no-links** hooks, and
+`mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping Rope, the usage MCP, Ruflo + overlay).
 
 ## Docs
 - [RULES.md](RULES.md): the rules sheet (paste-ready: [templates/CLAUDE.md](templates/CLAUDE.md))

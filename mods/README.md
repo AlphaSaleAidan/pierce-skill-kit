@@ -44,7 +44,19 @@ Set them in `settings.json` under `env`, or in your shell profile.
 - Project-specific automations (content engines, revenue tools, app-store scripts, backups, experiments): tied to
   one business and don't generalize.
 
-## Other plugins worth installing
-Public plugins this setup also runs, from their own marketplaces (`/plugin install <name>@<marketplace>`):
-`superpowers`, `hookify`, `claude-md-management`, `session-report`, `security-guidance`, `hyperframes`
-(all `@claude-plugins-official`), plus service plugins (Vercel, Stripe, Discord, Telegram) if you use those services.
+## Everything else this setup runs: `mods/extras.sh`
+One command installs the rest, asking before each group (`--yes` for all, `--list` to only print the commands):
+
+| Group | What | Source · license |
+|---|---|---|
+| Official plugins | superpowers, hookify, hyperframes, claude-md-management, session-report, security-guidance | [anthropics/claude-plugins-official](https://github.com/anthropics/claude-plugins-official) |
+| Ponytail | "lazy senior dev" mode: a SessionStart hook that pushes the simplest working solution | [DietrichGebert/ponytail](https://github.com/DietrichGebert/ponytail) · MIT |
+| Service plugins | vercel, stripe, shippo, discord, telegram; vapi-voice-ai; watch (video understanding) | official marketplace · [VapiAI/skills](https://github.com/VapiAI/skills) · [bradautomates/claude-video](https://github.com/bradautomates/claude-video) |
+| Anthropic skills | the anthropics/skills marketplace (pick skills with `/plugin`) | [anthropics/skills](https://github.com/anthropics/skills) |
+| MCP servers | playwright, context7, memory, sequentialthinking, higgsfield (sign-in on first use; generation is paid). 21st.dev needs a paid key: printed, not installed | each project's own repo |
+| Jumping Rope | `ROPE.md` live session log that survives compaction, as a skill | [AlphaSaleAidan/jumping-rope](https://github.com/AlphaSaleAidan/jumping-rope) · MIT |
+| claude-usage MCP | lets Claude see its own session/weekly usage and stick to a budget | [AlphaSaleAidan/claude-usage-mcp](https://github.com/AlphaSaleAidan/claude-usage-mcp) · MIT |
+| Ruflo + overlay | ruvnet's orchestration + memory layer (`npx ruflo@latest init` in your home folder) plus this kit's 2-line fix so its memory bridge honours `CLAUDE_CONFIG_DIR` | [ruvnet/ruflo](https://github.com/ruvnet/ruflo) · MIT; details: [ruflo/README.md](ruflo/README.md) |
+
+Not installable yet: **VIBAL** (agent + human video timeline over MCP): its public repo is docs only so far.
+Multi-model routing playbook (Claude + Codex): [AlphaSaleAidan/opus-5-5-x-gpt-skill-tree](https://github.com/AlphaSaleAidan/opus-5-5-x-gpt-skill-tree).

@@ -52,5 +52,8 @@ if ! command -v jq >/dev/null; then echo "mods   -> skipped: needs jq (then: mod
 elif ask "Install the Claude Code mods (agent-board, model-map, projects-hub, statusline)? Hooks: see mods/README.md"; then
   for m in agent-board model-map projects-hub statusline; do sh mods/install.sh "$m" | sed 's/^/mods   -> /'; done
 fi
+if ask "Install everything else this setup runs (plugins, Ponytail, MCP servers, Jumping Rope, usage MCP, Ruflo)? It asks per group"; then
+  if [ "$mode" = yes ]; then sh mods/extras.sh --yes; else sh mods/extras.sh; fi
+fi
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "add to your shell profile: export PATH=\"$BIN:\$PATH\"";; esac
 echo "done. Start the lead with:  lead"
