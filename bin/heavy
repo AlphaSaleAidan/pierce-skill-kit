@@ -1,0 +1,17 @@
+#!/bin/sh
+# heavy <cmd...> - box-wide queue for CPU-heavy commands (builds, test suites, renders, browser captures, bulk jobs).
+# At most $LK_HEAVY_SLOTS run at once, at nice $LK_HEAVY_NICE, and none starts while free RAM is under $LK_MIN_FREE_MB.
+. "$(dirname "$0")/lk-config"
+[ $# -gt 0 ] || { sed -n 2,3p "$0"; exit 2; }
+free_mb() { awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo 2>/dev/null || echo 999999; }
+while :; do
+  if [ "$(free_mb)" -ge "$LK_MIN_FREE_MB" ]; then
+    s=1
+    while [ "$s" -le "$LK_HEAVY_SLOTS" ]; do
+      exec 9>"$LK_HOME/.heavy-slot-$s.lock"
+      if flock -n 9; then renice -n "$LK_HEAVY_NICE" -p $$ >/dev/null 2>&1; exec "$@"; fi
+      s=$((s + 1))
+    done
+  fi
+  sleep 5
+done

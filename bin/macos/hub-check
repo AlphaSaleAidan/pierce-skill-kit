@@ -1,0 +1,25 @@
+#!/bin/sh
+# hub-check [--fix] - macOS ONLY. Verify the Mac matches the hub: exactly one live Terminal window per hub tab.
+# --fix closes dead Mac windows BY WINDOW ID (never Cmd-W). Prints MAC UNREACHABLE (exit 2) rather than
+# pretending things are clean when it can't see the Mac.
+. "$(dirname "$0")/lk-config"
+[ -n "$LK_MAC_SSH" ] || { echo "hub-check: set LK_MAC_SSH in the config" >&2; exit 1; }
+fix=$1
+# shellcheck disable=SC2086
+mac() { $LK_MAC_SSH "$@" 2>/dev/null; }
+tabs=$(tmux list-windows -t "$LK_HUB" -F '#{window_name}')
+views=$(for v in $(tmux list-sessions -F '#{session_name}' | grep '^view-'); do tmux display -p -t "$v" "#{window_name}|$v"; done)
+win=$(mac "osascript -e 'set o to \"\"' -e 'tell application \"Terminal\"' -e 'repeat with w in windows' -e 'set o to o & (id of w) & \"|\" & (custom title of tab 1 of w) & \"|\" & (busy of tab 1 of w) & linefeed' -e 'end repeat' -e 'end tell' -e 'return o'") \
+  || { echo "MAC UNREACHABLE: can't verify; say so, don't claim clean"; exit 2; }
+echo "$tabs" | while read -r t; do
+  nv=$(echo "$views" | grep -c "^$t|"); nm=$(echo "$win" | awk -F'|' -v t="$t" '$2==t && $3=="true"' | wc -l)
+  [ "$nv" = 1 ] && [ "$nm" = 1 ] && s=ok || s=MISMATCH
+  echo "$s  $t  views=$nv macWindows=$nm"
+done
+echo "--- Mac windows not matching a live hub tab:"
+echo "$win" | while IFS='|' read -r id title busy; do
+  [ -z "$id" ] && continue
+  echo "$tabs" | grep -qxF "$title" && [ "$busy" = true ] && continue
+  echo "  W$id '$title' busy=$busy"
+  [ "$fix" = --fix ] && [ "$busy" = false ] && mac "osascript -e 'tell application \"Terminal\" to close window id $id'" && echo "    closed"
+done

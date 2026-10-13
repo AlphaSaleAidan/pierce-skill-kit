@@ -1,0 +1,32 @@
+#!/bin/sh
+# tab-watch - the watchdog. Run it every 15 min from cron. A hub tab that sat unchanged for 2 checks in a row,
+# with no `report` in the last $LK_IDLE_MIN minutes, gets flagged to the lead ONCE per idle stretch.
+# Skipped: the lead itself, busy tabs, and tabs whose last report was needs-human (waiting, not stuck).
+. "$(dirname "$0")/lk-config"
+S=$LK_HOME/tab-watch.state; R=$LK_HOME/reports.tsv
+touch "$S"; now=$(date +%s); new=""
+tmux has-session -t "$LK_HUB" 2>/dev/null || exit 0
+for w in $(tmux list-windows -t "$LK_HUB" -F '#{window_index}'); do
+  name=$(tmux display -p -t "$LK_HUB:$w" '#W'); [ "$name" = "$LK_LEAD_WINDOW" ] && continue
+  pane=$(tmux capture-pane -p -t "$LK_HUB:$w" -S -60)
+  h=$(printf '%s' "$pane" | grep -v -E "$LK_WATCH_IGNORE" | cksum | cut -d' ' -f1)
+  row=$(grep "^$name	" "$S" | head -1)
+  prev=$(echo "$row" | cut -f2); flagged=$(echo "$row" | cut -f3); prevh=$(echo "$row" | cut -f4)
+  # busy = Claude Code shows background agents (◯), queued input, the interrupt hint, or the screen changed
+  if printf '%s' "$pane" | tail -12 | grep -q -E '^\s*◯ |Press up to edit queued|esc to interrupt' || [ "$h" != "$prevh" ]
+  then state=busy; else state=idle; fi
+  if [ "$state" = idle ] && [ "$prev" = idle ] && [ "$flagged" != yes ]; then
+    last=$(awk -F'\t' -v t="$name" '$6==t{x=$1} END{print x}' "$R" 2>/dev/null)
+    laststat=$(awk -F'\t' -v t="$name" '$6==t{x=$3} END{print x}' "$R" 2>/dev/null)
+    lastsec=0; [ -n "$last" ] && lastsec=$(date -u -d "$last" +%s 2>/dev/null || echo 0)
+    if [ $((now - lastsec)) -gt $((LK_IDLE_MIN * 60)) ] && [ "$laststat" != needs-human ]; then
+      tmux send-keys -t "$LK_LEAD" -l "[WATCH] tab '$name' ($LK_HUB:$w) is idle with no report in the last $LK_IDLE_MIN min. Check it: finished, stuck, or waiting on the human?" \
+        && sleep 0.5 && tmux send-keys -t "$LK_LEAD" Enter
+    fi
+    flagged=yes
+  fi
+  [ "$state" = busy ] && flagged=no
+  new="$new$name	$state	$flagged	$h
+"
+done
+printf '%s' "$new" > "$S"

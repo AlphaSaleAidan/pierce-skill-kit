@@ -1,0 +1,15 @@
+#!/bin/sh
+# mac-close-dead - macOS ONLY. Close Terminal.app windows whose server session has ended (not busy AND the
+# last output shows "[exited]", "[Process completed]" or an ssh "Connection to ... closed").
+# Closes by window, never by keystroke (Cmd-W hits whatever window is in FRONT). Never touches busy windows.
+. "$(dirname "$0")/lk-config"
+[ -n "$LK_MAC_SSH" ] || { echo "mac-close-dead: set LK_MAC_SSH in the config" >&2; exit 1; }
+# shellcheck disable=SC2086
+out=$($LK_MAC_SSH "osascript \
+  -e 'set n to 0' -e 'tell application \"Terminal\"' -e 'repeat with w in (every window)' -e 'try' \
+  -e 'set t to tab 1 of w' -e 'if not (busy of t) then' -e 'set h to history of t' -e 'set L to count of h' \
+  -e 'if L > 200 then set h to text (L - 199) thru L of h' \
+  -e 'if h contains \"[exited]\" or h contains \"[Process completed]\" or (h contains \"Connection to \" and h contains \" closed.\") then' \
+  -e 'close w saving no' -e 'set n to n + 1' -e 'end if' -e 'end if' -e 'end try' -e 'end repeat' -e 'end tell' -e 'return n'" 2>/dev/null) \
+  && { echo "closed $out dead Terminal window(s)"; exit 0; }
+echo "mac-close-dead: can't reach the Mac" >&2; exit 1

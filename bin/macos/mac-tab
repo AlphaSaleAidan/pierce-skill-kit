@@ -1,0 +1,24 @@
+#!/bin/sh
+# mac-tab <session:window> [title] - macOS ONLY. Open a hub tab as a new tab in your front Terminal.app window.
+# Needs LK_MAC_SSH (server -> Mac, e.g. a reverse tunnel) and LK_BOX_SSH (Mac -> server) in the config.
+# A real tab needs Accessibility permission for sshd on the Mac (System Settings > Privacy & Security >
+# Accessibility); without it this falls back to a new window.
+. "$(dirname "$0")/lk-config"
+[ -n "$LK_MAC_SSH" ] && [ -n "$LK_BOX_SSH" ] || { echo "mac-tab: set LK_MAC_SSH and LK_BOX_SSH in the config" >&2; exit 1; }
+target=$1; title=${2:-$1}
+cmd="$LK_BOX_SSH tab-view $target"
+# shellcheck disable=SC2086
+out=$($LK_MAC_SSH "osascript \
+  -e 'tell application \"Terminal\" to activate' \
+  -e 'try' \
+  -e '  tell application \"System Events\" to keystroke \"t\" using command down' \
+  -e '  delay 0.6' \
+  -e '  tell application \"Terminal\" to set t to do script \"$cmd\" in selected tab of front window' \
+  -e '  set how to \"tab\"' \
+  -e 'on error' \
+  -e '  tell application \"Terminal\" to set t to do script \"$cmd\"' \
+  -e '  set how to \"window (grant Accessibility for real tabs)\"' \
+  -e 'end try' \
+  -e 'tell application \"Terminal\" to set custom title of t to \"$title\"' \
+  -e 'return how'" 2>/dev/null) && { echo "opened $title as a $out"; exit 0; }
+echo "mac-tab: can't reach the Mac (is the tunnel open?)" >&2; exit 1

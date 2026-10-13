@@ -1,0 +1,11 @@
+#!/bin/sh
+# brief-send <tab name or session:window> <brief.md> - hand a written brief from the lead to a project tab.
+# The tab gets ONE short line pointing at the file, so long instructions never get mangled in the input box.
+. "$(dirname "$0")/lk-config"
+target=$1; file=$2
+case $target in *:*) ;; *) target="$LK_HUB:$target";; esac
+[ -f "$file" ] || { echo "brief-send: no such brief: $file" >&2; exit 1; }
+tmux list-windows -t "${target%%:*}" -F '#W #I' 2>/dev/null | grep -qw -- "${target#*:}" || { echo "brief-send: no tab $target" >&2; exit 1; }
+file=$(realpath "$file")
+tmux send-keys -t "$target" -l "Brief from the lead: read $file and follow it (skill: project-tab). Report every finished task / blocker / question with: report <project> <done|progress|blocked|needs-human|failed> \"<one line + proof>\"" \
+  && sleep 0.5 && tmux send-keys -t "$target" Enter && echo "sent $file -> $target"

@@ -1,0 +1,13 @@
+#!/bin/sh
+# tab-view <session:window> - look at one tab in its own terminal, independently of other terminals
+# (a linked tmux view: switching tabs here doesn't move anyone else's; the view dies when the terminal closes).
+# One view per tab: opening a tab again replaces its older view instead of stacking duplicates.
+. "$(dirname "$0")/lk-config"
+target=${1:-$LK_LEAD}
+sess=${target%%:*}; win=${target#*:}
+for v in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^view-'); do
+  [ "$(tmux display -p -t "$v" '#{session_group}')" = "$sess" ] || continue
+  [ "$(tmux display -p -t "$v" '#{window_name}')" = "$win" ] || [ "$(tmux display -p -t "$v" '#{window_index}')" = "$win" ] || continue
+  tmux kill-session -t "$v"
+done
+exec tmux new-session -t "$sess" -s "view-$$" \; set-option destroy-unattached on \; select-window -t ":$win"

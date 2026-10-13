@@ -1,0 +1,17 @@
+#!/bin/sh
+# report - the ONE way a project tab tells the lead something. It logs the line AND types it into the lead's
+# window, so a report can never go to a stale session nobody reads.
+#   report <project> <done|progress|blocked|needs-human|failed> "<one line: result + proof>" [path-or-link ...]
+. "$(dirname "$0")/lk-config"
+[ $# -ge 3 ] || { sed -n 2,4p "$0"; exit 2; }
+proj=$1; st=$2; msg=$3; shift 3; extra="$*"
+case $st in done|progress|blocked|needs-human|failed) ;; *) echo "report: status must be done|progress|blocked|needs-human|failed" >&2; exit 2;; esac
+log=$LK_HOME/reports.tsv
+[ -f "$log" ] || printf 'time_utc\tproject\tstatus\tmessage\tproof\ttab\n' > "$log"
+tab=$(tmux display -p -t "${TMUX_PANE:-}" '#{window_name}' 2>/dev/null || echo "?")
+oneline=$(printf '%s' "$msg" | tr '\t\n' '  ')
+printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$proj" "$st" "$oneline" "$extra" "$tab" >> "$log"
+text="[REPORT $st] $proj ($tab): $oneline${extra:+ | $extra}"
+# flock so two tabs reporting at once don't interleave keystrokes in the lead's input box
+( flock -w 20 9; tmux send-keys -t "$LK_LEAD" -l "$text" && sleep 0.7 && tmux send-keys -t "$LK_LEAD" Enter && sleep 0.5 ) \
+  9>"$LK_HOME/.report.lock" && echo "reported to the lead: $st" || { echo "report: logged, but the lead window $LK_LEAD is not running" >&2; exit 1; }

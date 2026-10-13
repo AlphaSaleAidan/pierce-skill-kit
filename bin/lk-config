@@ -1,0 +1,8 @@
+# lk-config - sourced by every Pierce Skill Kit tool: loads your config, fills in defaults.
+# shellcheck shell=sh
+[ -f "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" ] && . "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}"
+: "${LK_HOME:=$HOME/.pierce-skill-kit}" "${LK_HUB:=hub}" "${LK_LEAD_WINDOW:=Lead}" "${LK_LEAD_DIR:=$HOME}"
+: "${LK_CLAUDE:=claude}" "${LK_IDLE_MIN:=60}" "${LK_WATCH_IGNORE:=auto mode|bypass permissions|accept edits}"
+: "${LK_HEAVY_SLOTS:=2}" "${LK_HEAVY_NICE:=15}" "${LK_MIN_FREE_MB:=4096}"
+LK_LEAD="$LK_HUB:$LK_LEAD_WINDOW"
+mkdir -p "$LK_HOME/briefs"

@@ -1,0 +1,24 @@
+#!/bin/sh
+# lead-daily - end-of-day digest of what the lead and its tabs did in the last 24 h (reports, open orders,
+# new briefs, decisions). Prints to stdout; pipe it wherever you read things (mail, a chat webhook, a file).
+#   lead-daily            raw digest
+#   lead-daily --summary  ask Claude (headless) to turn it into a short plain-words wrap-up; falls back to raw
+. "$(dirname "$0")/lk-config"
+since=$(date -u -d '24 hours ago' +%Y-%m-%dT%H:%MZ)
+raw=$(
+  echo "# Digest since $since"
+  echo "## Reports"
+  awk -F'\t' -v s="$since" 'NR>1 && $1>=s {printf "- %s %s [%s] %s %s\n",$1,$2,$3,$4,($5?"("$5")":"")}' "$LK_HOME/reports.tsv" 2>/dev/null
+  echo "## Open orders"
+  "$(dirname "$0")/order" list
+  echo "## Briefs written"
+  find "$LK_HOME/briefs" -name '*.md' -newermt '24 hours ago' -printf '- %f\n' 2>/dev/null | sort
+  [ -f "$LK_HOME/decisions.md" ] && { echo "## Decisions (last 20)"; tail -n 20 "$LK_HOME/decisions.md"; }
+)
+if [ "$1" = --summary ]; then
+  # shellcheck disable=SC2086
+  out=$(printf '%s\n' "$raw" | timeout 600 $LK_CLAUDE -p --model "${LK_SUMMARY_MODEL:-sonnet}" "Write a short end-of-day wrap-up for a busy human from these records. Plain words, answer first, bullets, under 200 words: what got done (with proof), what failed, what waits on them. Only state what the records support; never invent numbers or links." 2>/dev/null)
+  [ -n "$out" ] && { printf '%s\n' "$out"; exit 0; }
+  echo "(summary unavailable - raw digest below)"
+fi
+printf '%s\n' "$raw"

@@ -1,0 +1,14 @@
+#!/bin/sh
+# lead - start the LEAD session (tmux session $LK_HUB, window $LK_LEAD_WINDOW) or bring it back in this terminal.
+#   lead            start it if missing, then attach
+#   lead -d         start it detached (for scripts / cron / tests)
+. "$(dirname "$0")/lk-config"
+if ! tmux has-session -t "$LK_HUB" 2>/dev/null; then
+  tmux new-session -d -s "$LK_HUB" -n "$LK_LEAD_WINDOW" -c "$LK_LEAD_DIR" "$LK_CLAUDE" || exit 1
+  tmux set-window-option -t "$LK_LEAD" automatic-rename off >/dev/null
+  echo "started the lead ($LK_LEAD)"
+fi
+tmux list-windows -t "$LK_HUB" -F '#W' | grep -qx "$LK_LEAD_WINDOW" || {
+  echo "lead: session $LK_HUB has no '$LK_LEAD_WINDOW' window - start one: tmux new-window -t $LK_HUB -n $LK_LEAD_WINDOW $LK_CLAUDE" >&2; exit 1; }
+[ "$1" = -d ] && exit 0
+exec "$(dirname "$0")/tab-view" "$LK_LEAD"

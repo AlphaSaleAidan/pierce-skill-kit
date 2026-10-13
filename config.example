@@ -1,0 +1,36 @@
+# Pierce Skill Kit config. install.sh copies this to ~/.config/pierce-skill-kit/config.
+# Every tool sources it. Point LK_CONFIG at another file to use a different setup (handy for tests).
+
+# Where reports, orders, briefs and watchdog state live.
+LK_HOME="$HOME/.pierce-skill-kit"
+
+# tmux session that holds the lead + every project tab, and the lead's window name.
+LK_HUB=hub
+LK_LEAD_WINDOW=Lead
+
+# Folder the lead session starts in (pick a neutral "control" folder, not a project repo).
+LK_LEAD_DIR="$HOME"
+
+# Command that starts Claude Code. Swap in your own wrapper if you have one.
+LK_CLAUDE=claude
+
+# Watchdog: flag a tab idle 2 checks in a row with no report in this many minutes.
+LK_IDLE_MIN=60
+# Lines matching this regex are ignored when deciding if a tab changed
+# (put anything here that ticks on its own, e.g. a clock in your status line).
+LK_WATCH_IGNORE='auto mode|bypass permissions|accept edits'
+
+# Model lead-daily --summary uses (a mid model is plenty for a digest).
+LK_SUMMARY_MODEL=sonnet
+
+# heavy: box-wide queue for CPU-heavy commands.
+LK_HEAVY_SLOTS=2
+LK_HEAVY_NICE=15
+# RAM guard: heavy jobs wait while free memory is below this (MB).
+LK_MIN_FREE_MB=4096
+
+# --- macOS helpers only (bin/macos). Leave empty if you don't use a Mac terminal. ---
+# How the server reaches your Mac (usually a reverse SSH tunnel you opened from the Mac).
+LK_MAC_SSH=''            # e.g. 'ssh -p 2222 -o BatchMode=yes -o ConnectTimeout=6 me@localhost'
+# How your Mac reaches the server (used inside the Terminal.app tabs it opens).
+LK_BOX_SSH=''            # e.g. 'ssh -t me@my-server'
