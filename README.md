@@ -1,32 +1,58 @@
-# Pierce Skill Kit
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/hero/hero-dark.png">
+    <img alt="A lead node floating above five project-tab nodes, with report beams rising from the tabs to the lead" src="assets/hero/hero-light.png" width="100%">
+  </picture>
+</p>
+
+<h1 align="center">Pierce Skill Kit</h1>
+
+<p align="center">
+  <b>One lead. Many Claude Code tabs. Briefs out, reports in, nothing silently stuck.</b>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-0087af?style=flat-square"></a>
+  <a href="https://github.com/AlphaSaleAidan/pierce-skill-kit/actions/workflows/test.yml"><img alt="install test" src="https://img.shields.io/github/actions/workflow/status/AlphaSaleAidan/pierce-skill-kit/test.yml?branch=main&label=install%20test&style=flat-square"></a>
+  <img alt="tmux + Claude Code" src="https://img.shields.io/badge/runs%20on-tmux%20%2B%20Claude%20Code-30363d?style=flat-square">
+</p>
 
 Run many Claude Code sessions at once without losing track of them. One **lead** session manages a set of
 **project tabs** in tmux: it writes briefs, hands them out, gets a report the moment anything finishes or
 breaks, and only bubbles up to you what needs you. It comes with a skill for each role, a model-routing tree
 that keeps token spend sane, and a one-page [rules sheet](RULES.md) that keeps it safe to leave running.
 
-<!-- demo: 60-second asciinema/GIF goes here -->
+## 30-second quick start
+```sh
+git clone https://github.com/AlphaSaleAidan/pierce-skill-kit && cd pierce-skill-kit && ./install.sh
+lead                                      # start the lead (tmux session "hub", window "Lead")
+claude-tab ~/code/acme-app -n acme-app    # open a project tab; brief it, it reports back with `report`
+```
 
-```
-                 you
-                  │  asks / decisions          ▲ answers: ~150 words, only what changed
-                  ▼                            │
-        ┌───────────────────────────────────────────┐
-        │  LEAD  (tmux hub:Lead, strongest model)    │  order ledger · briefs · decisions log
-        └───────────────────────────────────────────┘
-          │ brief-send <tab> <brief.md>      ▲ report <project> <status> "<line + proof>"
-          ▼                                  │                      ▲ [WATCH] idle tab
-   ┌──────────────┐ ┌──────────────┐ ┌──────────────┐         ┌───────────┐
-   │ tab: acme-app│ │ tab: data-sync│ │ tab: docs    │ ◄────── │ tab-watch │ (cron, 15 min)
-   │ + subagents  │ │ + subagents   │ │ + subagents  │         └───────────┘
-   └──────────────┘ └──────────────┘ └──────────────┘
-          heavy jobs (builds, renders, captures) queue through `heavy`: ≤2 at once, low priority, RAM guard
-```
+<table>
+<tr>
+<td width="33%" valign="top"><img src="assets/icons/tabs.svg" width="28" alt=""><br><b>One lead, many tabs</b><br>Each project gets its own Claude Code tab; the lead routes work and refuses duplicates.</td>
+<td width="33%" valign="top"><img src="assets/icons/report.svg" width="28" alt=""><br><b>Reports, one path</b><br><code>report</code> logs every result with proof and types it straight into the lead.</td>
+<td width="33%" valign="top"><img src="assets/icons/watch.svg" width="28" alt=""><br><b>Nothing silently stuck</b><br>A watchdog flags idle tabs, but not the ones waiting on you.</td>
+</tr>
+<tr>
+<td valign="top"><img src="assets/icons/route.svg" width="28" alt=""><br><b>Model routing</b><br>Strongest model for hard calls and grading; cheaper ones for lanes and lookups.</td>
+<td valign="top"><img src="assets/icons/shield.svg" width="28" alt=""><br><b>Rules that hold</b><br>Ask before sends, prove before done, no prod without you. One page, with the why.</td>
+<td valign="top"><img src="assets/icons/queue.svg" width="28" alt=""><br><b>Box-friendly</b><br>Heavy jobs queue two at a time, low priority, with a RAM guard.</td>
+</tr>
+</table>
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/architecture-dark.svg">
+    <img alt="Architecture: you talk to the lead; the lead sends briefs to project tabs; tabs report back; a watchdog flags idle tabs; heavy jobs queue box-wide" src="assets/architecture-light.svg" width="100%">
+  </picture>
+</p>
 
 ## Install
 Needs Linux, `tmux`, `flock` (util-linux) and [Claude Code](https://docs.claude.com/en/docs/claude-code).
 ```sh
-git clone <this repo> && cd pierce-skill-kit && ./install.sh
+git clone https://github.com/AlphaSaleAidan/pierce-skill-kit && cd pierce-skill-kit && ./install.sh
 ```
 It puts the tools in `~/.local/bin`, the two skills in `~/.claude/skills`, a config at
 `~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the tmux settings, appending the
@@ -77,6 +103,7 @@ projects, sessions, PRs, services), **statusline**, the **lead-guard**, **review
 - [docs/prompting.md](docs/prompting.md): briefs, talking to Claude, graders, subagents, creative prompts, dictation
 - [docs/memory-and-context.md](docs/memory-and-context.md): file memory, the index, and keeping context across long sessions
 - [docs/api-stack.md](docs/api-stack.md): example services + env var names, and how to store keys by path
+- [docs/windows.md](docs/windows.md): Windows Terminal + ssh into your server, a `lead` shortcut, a tab per project
 - [docs/macos.md](docs/macos.md): optional Terminal.app helpers (macOS-only)
 
 ## What's macOS-specific

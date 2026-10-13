@@ -1,0 +1,18 @@
+name: install-test
+on: [push, pull_request]
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: |
+          docker run --rm -v "$PWD:/mnt" koalaman/shellcheck:stable -S warning \
+            /mnt/install.sh /mnt/bin/lead /mnt/bin/tab-view /mnt/bin/claude-tab /mnt/bin/brief-send /mnt/bin/report \
+            /mnt/bin/order /mnt/bin/heavy /mnt/bin/tab-watch /mnt/bin/lead-daily /mnt/bin/macos/mac-tab \
+            /mnt/bin/macos/mac-close-dead /mnt/bin/macos/hub-check /mnt/hooks/lead-no-worker-agents.sh \
+            /mnt/tests/smoke.sh /mnt/tests/hook-test.sh
+      - name: hook test
+        run: sh tests/hook-test.sh
+      - name: fresh-install smoke test (clean container)
+        run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/smoke.sh
