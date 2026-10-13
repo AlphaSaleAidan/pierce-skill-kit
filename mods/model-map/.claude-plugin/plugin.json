@@ -1,0 +1,8 @@
+{
+  "name": "model-map",
+  "version": "0.2.0",
+  "description": "Remap sub-agent models live (e.g. haiku -> claude-haiku-5-5) with /models, no restart",
+  "author": {
+    "name": "Pierce Skill Kit contributors"
+  }
+}

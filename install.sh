@@ -43,5 +43,9 @@ if ask "Install the macOS Terminal.app helpers (only if you drive this box from 
   for f in bin/macos/mac-tab bin/macos/mac-close-dead bin/macos/hub-check; do put "$f" "$BIN/$(basename "$f")"; chmod +x "$BIN/$(basename "$f")"; done
   echo "macos  -> mac-tab, mac-close-dead, hub-check (set LK_MAC_SSH + LK_BOX_SSH in the config)"
 fi
+if ! command -v jq >/dev/null; then echo "mods   -> skipped: needs jq (then: mods/install.sh <name>)"
+elif ask "Install the Claude Code mods (agent-board, model-map, projects-hub, statusline)? Hooks: see mods/README.md"; then
+  for m in agent-board model-map projects-hub statusline; do sh mods/install.sh "$m" | sed 's/^/mods   -> /'; done
+fi
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "add to your shell profile: export PATH=\"$BIN:\$PATH\"";; esac
 echo "done. Start the lead with:  lead"

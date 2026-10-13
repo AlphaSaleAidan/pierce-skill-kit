@@ -1,0 +1,9 @@
+{
+  "name": "agent-board",
+  "version": "0.2.0",
+  "description": "Live board of every subagent (model, task, what it is doing now, green/yellow/red by how much it is struggling), an ask tool for clarifying questions, topic-based session titles, and a relay to the lead session",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Pierce Skill Kit contributors"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "projects-hub",
+  "version": "0.2.0",
+  "description": "One pane for all projects, live Claude sessions, open PRs and running services on the box",
+  "types": "./types/index.d.ts",
+  "author": {
+    "name": "Pierce Skill Kit contributors"
+  }
+}

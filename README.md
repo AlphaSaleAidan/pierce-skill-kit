@@ -30,7 +30,7 @@ git clone <this repo> && cd pierce-skill-kit && ./install.sh
 ```
 It puts the tools in `~/.local/bin`, the two skills in `~/.claude/skills`, a config at
 `~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the tmux settings, appending the
-rules to your `~/.claude/CLAUDE.md`, the watchdog cron, and the macOS helpers. `--yes` / `--no` skip the questions.
+rules to your `~/.claude/CLAUDE.md`, the watchdog cron, the macOS helpers, and the Claude Code mods. `--yes` / `--no` skip the questions.
 
 ## The workflow
 ```sh
@@ -53,6 +53,11 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `tab-watch` | watchdog: flags tabs idle with no report (not ones waiting on you) |
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
 | `lead-daily [--summary]` | end-of-day digest of reports, open orders, briefs and decisions |
+
+## Mods
+Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
+(live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
+projects, sessions, PRs, services), **statusline**, and the **lead-guard**, **review-gate** and **mail-no-links** hooks.
 
 ## Docs
 - [RULES.md](RULES.md): the rules sheet (paste-ready: [templates/CLAUDE.md](templates/CLAUDE.md))
