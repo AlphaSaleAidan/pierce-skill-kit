@@ -5,6 +5,11 @@
 #   ./install.sh --no       core only: tools, skills, config
 set -e
 cd "$(dirname "$0")"
+# Guard: a CLAUDE_CONFIG_DIR outside this HOME (e.g. a test run with a temp HOME) would write into someone else's
+# live Claude config. Refuse unless asked for explicitly.
+case "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" in "$HOME"/*) ;; *)
+  [ "$LK_ALLOW_CONFIG_DIR" = 1 ] || { echo "refusing: CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR is outside HOME=$HOME. Unset it (env -u CLAUDE_CONFIG_DIR ...) or set LK_ALLOW_CONFIG_DIR=1 if you mean it." >&2; exit 1; };;
+esac
 mode=ask; case $1 in --yes) mode=yes;; --no) mode=no;; "") ;; *) sed -n 2,5p "$0"; exit 2;; esac
 BIN=$HOME/.local/bin; CFG=$HOME/.config/pierce-skill-kit; CLAUDE_DIR=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
 ask() { [ "$mode" = yes ] && return 0; [ "$mode" = no ] && return 1; printf '%s [y/N] ' "$1"; read -r a; [ "$a" = y ] || [ "$a" = Y ]; }

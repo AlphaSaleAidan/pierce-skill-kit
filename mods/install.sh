@@ -6,6 +6,11 @@
 #   add --uninstall to any of these to remove it.          Restart Claude Code afterwards. Needs jq.
 set -e
 cd "$(dirname "$0")"
+# Guard: a CLAUDE_CONFIG_DIR outside this HOME (e.g. a test run with a temp HOME) would write into someone else's
+# live Claude config. Refuse unless asked for explicitly.
+case "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" in "$HOME"/*) ;; *)
+  [ "$LK_ALLOW_CONFIG_DIR" = 1 ] || { echo "refusing: CLAUDE_CONFIG_DIR=$CLAUDE_CONFIG_DIR is outside HOME=$HOME. Unset it (env -u CLAUDE_CONFIG_DIR ...) or set LK_ALLOW_CONFIG_DIR=1 if you mean it." >&2; exit 1; };;
+esac
 KIT=$(cd .. && pwd); DEST=$HOME/.config/pierce-skill-kit/mods
 SET=${CLAUDE_CONFIG_DIR:-$HOME/.claude}/settings.json
 command -v jq >/dev/null || { echo "needs jq"; exit 1; }
