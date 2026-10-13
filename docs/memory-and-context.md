@@ -62,6 +62,42 @@ Habits:
 - Answer status questions from the files (`order list`, the tail of `reports.tsv`), not from memory.
 - Per-project memory folders keep one project's facts from leaking into another's decisions.
 
-## 5. Optional: search over memory
+## 5. Jumping Rope: a live session log that survives compaction
+[Jumping Rope](https://github.com/AlphaSaleAidan/jumping-rope) (MIT) keeps a session's *in-flight* state in one
+file, `ROPE.md`, at the repo root: current state, goals, decisions with reasons, what changed where, open threads.
+When the context is cleared or compacted (*the jump*), the fresh session re-seeds from the rope alone instead of
+replaying the transcript.
+
+Its Claude Code skill (`adapters/claude-skill/jumping-rope/`, copy it into your skills folder) drives it through
+`scripts/rope_ops.py`:
+
+```sh
+python scripts/rope_ops.py init                                    # start a rope (or read ROPE.md first if it exists)
+python scripts/rope_ops.py log decision "use sqlite-vec" --reason "zero server"
+python scripts/rope_ops.py log open "flaky test in CI" --priority 1  # also: state, goal, delta
+python scripts/rope_ops.py jump                                    # before/after a clear: print the rope, re-seed from it
+python scripts/rope_ops.py query "sqlite-vec decision"             # fetch detail the rope demoted
+```
+
+- **Bound mode** caps the rope (default 2,000 tokens) and moves older detail into a local SQLite store you
+  `query`. **Unbound mode** keeps everything on the rope and drops the transcript instead. `retire` turns a hot
+  unbound session into a compact bound one when it goes cold.
+- Without the Python package it still works (degraded mode: overflow goes to `.rope_overflow.md`).
+- Numbers its own test suite reports: the rope notation is 42.1% fewer tokens than plain prose on a test fixture;
+  at the final jump the outbound payload was 17.3–17.8% of the full-history payload; a cold agent recovered 20/20
+  planted facts through a hostile compaction. Its stated limit: with 200 near-duplicate distractors, the default hash
+  embeddings found verbatim and near-verbatim queries but missed a paraphrase (67% hit rate across the three styles).
+
+**Rope vs file memory:**
+
+| Use | For |
+|---|---|
+| `ROPE.md` (Jumping Rope) | *this* session's live state: what's done, what's next, why we chose X, what's open. Changes every few minutes |
+| File memory (§1) | durable facts and rules that should still be true next month, across every session |
+| Kit files (§4) | the lead's cross-tab record: briefs, decisions, reports, orders |
+
+A decision that will matter beyond this session goes in both: logged on the rope now, saved as a memory once it holds.
+
+## 6. Optional: search over memory
 Past a few hundred memories, the index can't list everything. A local vector index over the memory folder lets
 a session search by meaning ("anything about deploy links?"). It's optional; a tidy index plus `grep` goes a long way.
