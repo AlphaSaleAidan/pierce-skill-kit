@@ -1,0 +1,6 @@
+{
+  "name": "Pierce Skill Kit (try it locally)",
+  "image": "mcr.microsoft.com/devcontainers/base:debian",
+  "postCreateCommand": "PSK_DIR=$PWD PSK_NO_PULL=1 bash get.sh --yes",
+  "remoteEnv": { "PATH": "${containerEnv:HOME}/.local/bin:${containerEnv:PATH}" }
+}

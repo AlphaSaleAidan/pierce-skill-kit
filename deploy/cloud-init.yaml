@@ -1,0 +1,8 @@
+#cloud-config
+# Paste into "User data" / "Cloud-init" when creating an Ubuntu or Debian server (Hetzner, DigitalOcean,
+# most others). On first boot it installs the Pierce Skill Kit for the server's default user (or root if there
+# is none). Then: ssh in, run `claude` once to sign in, then `lead`. Log: /var/log/pierce-skill-kit-setup.log
+package_update: true
+packages: [curl, git, sudo]
+runcmd:
+  - [bash, -c, 'U=$(getent passwd 1000 | cut -d: -f1); U=${U:-root}; su - "$U" -c "curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/get.sh | bash -s -- --yes" > /var/log/pierce-skill-kit-setup.log 2>&1']

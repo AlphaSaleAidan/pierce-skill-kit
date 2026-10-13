@@ -11,8 +11,27 @@ jobs:
             /mnt/install.sh /mnt/bin/lead /mnt/bin/tab-view /mnt/bin/claude-tab /mnt/bin/brief-send /mnt/bin/report \
             /mnt/bin/order /mnt/bin/heavy /mnt/bin/tab-watch /mnt/bin/lead-daily /mnt/bin/macos/mac-tab \
             /mnt/bin/macos/mac-close-dead /mnt/bin/macos/hub-check /mnt/hooks/lead-no-worker-agents.sh \
-            /mnt/tests/smoke.sh /mnt/tests/hook-test.sh
+            /mnt/tests/smoke.sh /mnt/tests/hook-test.sh /mnt/get.sh /mnt/bin/lk-doctor /mnt/mods/install.sh \
+            /mnt/mods/extras.sh /mnt/mods/statusline/statusline.sh /mnt/hooks/review-gate.sh /mnt/hooks/mail-no-links.sh \
+            /mnt/tests/get-test.sh /mnt/tests/update-test.sh /mnt/tests/mods-test.sh
       - name: hook test
         run: sh tests/hook-test.sh
       - name: fresh-install smoke test (clean container)
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/smoke.sh
+  one-liner:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image: ["ubuntu:24.04", "debian:12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: get.sh end to end on ${{ matrix.image }} (dry run, install, re-run, doctor)
+        run: docker run --rm -v "$PWD:/kit:ro" ${{ matrix.image }} sh /kit/tests/get-test.sh
+  update-and-mods:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: tmux copy + lead update
+        run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/update-test.sh
+      - name: mods install/uninstall round trip
+        run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/mods-test.sh

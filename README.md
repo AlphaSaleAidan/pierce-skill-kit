@@ -22,12 +22,18 @@ Run many Claude Code sessions at once without losing track of them. One **lead**
 breaks, and only bubbles up to you what needs you. It comes with a skill for each role, a model-routing tree
 that keeps token spend sane, and a one-page [rules sheet](RULES.md) that keeps it safe to leave running.
 
-## 30-second quick start
-```sh
-git clone https://github.com/AlphaSaleAidan/pierce-skill-kit && cd pierce-skill-kit && ./install.sh
-lead                                      # start the lead (tmux session "hub", window "Lead")
-claude-tab ~/code/acme-app -n acme-app    # open a project tab; brief it, it reports back with `report`
-```
+## From zero in 3 steps
+1. **Get a Linux server** (Ubuntu or Debian; 4 GB RAM is plenty) from any host. Optional: paste
+   [deploy/cloud-init.yaml](deploy/cloud-init.yaml) into its "user data" box and step 2 happens on first boot.
+2. **Paste one line** on the server (it shows the plan first; `--dry-run` to only look, `--vps` to also harden the server):
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/get.sh | bash
+   ```
+3. **Sign in and start:** `claude` (once), then `lead`. Check anything with `lead doctor`.
+
+> **On Windows:** Windows Terminal + ssh, a `lead` shortcut and a tab per project: [docs/windows.md](docs/windows.md).
+> **On a Mac:** any terminal + ssh works; optional Terminal.app tab helpers: [docs/macos.md](docs/macos.md).
+> **Just trying it?** Open the repo in a devcontainer (VS Code / Codespaces) and it sets itself up.
 
 <table>
 <tr>
