@@ -51,6 +51,10 @@ claude-tab ~/code/acme-app -n acme-app    # open a project tab; brief it, it rep
   </picture>
 </p>
 
+## Updating
+`lead update` pulls the latest kit, re-applies it and reloads tmux live; `lead update --auto-on` does it every day.
+`lead doctor` checks the setup and prints a fix for anything missing.
+
 ## Install
 Needs Linux, `tmux`, `flock` (util-linux) and [Claude Code](https://docs.claude.com/en/docs/claude-code).
 ```sh

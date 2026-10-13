@@ -1,5 +1,6 @@
 #!/bin/sh
-# Statusline: folder + git branch/dirty count + model + Claude config in use, then hub counts (projects-hub mod)
+# Statusline: folder + git branch/dirty count + model + Claude config in use, then 5-hour + weekly plan usage
+# (from Claude Code's own rate_limits input), hub counts (projects-hub mod)
 # and a server-overload warning (agent-board's health check). Cached 30 s per folder+model so many tabs stay cheap.
 # Settings: "statusLine": { "type": "command", "command": "sh <this file>" }   Needs: jq. Optional: STATUSLINE_EXTRA
 # (a command whose output is appended to line 1, fed the same JSON on stdin).
@@ -19,6 +20,17 @@ cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; cfg=${cfg%/}
 line1="$line1  \033[2m│\033[0m  \033[35m$model\033[0m  \033[2m│\033[0m  \033[36m${cfg##*/}\033[0m"
 extra=''; [ -n "$STATUSLINE_EXTRA" ] && extra=$(printf '%s' "$in" | sh -c "$STATUSLINE_EXTRA" 2>/dev/null)
 printf '%b   %s' "$line1" "$extra"
+# Plan usage: the 5-hour and weekly windows Claude Code itself passes in (rate_limits; appears after the first reply).
+usage=$(printf '%s' "$in" | jq -r --argjson now "$(date +%s)" '
+  def bar(p): ([5, ((p // 0) / 20 | round)] | min) as $n | ("▰" * $n) + ("▱" * (5 - $n));
+  def col(p): if p >= 85 then "\u001b[31m" elif p >= 60 then "\u001b[33m" else "\u001b[32m" end;
+  def left(r): (try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null) as $t
+    | if $t == null then "" else ([0, ($t - $now) / 60 | floor] | max) as $m
+      | if $m >= 1440 then "\($m / 1440 | floor)d\($m % 1440 / 60 | floor)h" elif $m >= 60 then "\($m / 60 | floor)h" else "\($m)m" end end;
+  def win(lbl; w): if w == null or w.used_percentage == null then empty else
+    "\(lbl) \(col(w.used_percentage))\(bar(w.used_percentage)) \(w.used_percentage | round)%\u001b[0m \u001b[2m↻\(left(w.resets_at))\u001b[0m" end;
+  [win("5h"; .rate_limits.five_hour), win("week"; .rate_limits.seven_day)] | join("   ")' 2>/dev/null)
+[ -n "$usage" ] && printf '\n%s' "$usage"
 # Hub counts, if the projects-hub mod is installed next to this one; refreshed in the background every 5 min.
 hub=${HUB_CACHE:-$HOME/.cache/projects-hub.json}; gather=$here/../projects-hub/bin/gather.py
 if [ -f "$gather" ]; then

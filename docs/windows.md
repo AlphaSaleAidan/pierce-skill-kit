@@ -36,6 +36,7 @@ If scripts are blocked: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.
 | `mac-tab` (a Terminal.app tab per project) | `win-tab.ps1` (Windows Terminal tabs) |
 | `pbcopy` over a reverse tunnel | nothing to set up: the kit's tmux config turns on OSC 52 (`set -s set-clipboard on`), and Windows Terminal copies a tmux selection to your clipboard |
 | Voice Control / dictation | Windows voice typing: **Win+H** in any prompt |
+| Selecting text | drag with the mouse to copy (tmux, via OSC 52); the view stays put. **Shift+drag** uses Windows Terminal's own selection instead (bypasses tmux), then **Ctrl+Shift+C** to copy. **q** or **Esc** leaves scroll mode |
 | `mac-close-dead`, `hub-check` | not needed: closing a Windows Terminal tab ends its view; the hub tab keeps running on the server |
 
 ## Local instead of a server (optional)

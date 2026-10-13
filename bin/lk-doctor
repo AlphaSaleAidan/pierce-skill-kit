@@ -1,0 +1,45 @@
+#!/bin/sh
+# lk-doctor (run as `lead doctor`): check the setup and print a fix for anything missing.
+# Exit 1 if a required check fails; warnings don't fail.
+. "$(dirname "$0")/lk-config"
+fail=0
+ok()   { printf '  \033[32m✓\033[0m %s\n' "$1"; }
+bad()  { printf '  \033[31m✗\033[0m %s\n      fix: %s\n' "$1" "$2"; fail=1; }
+soft() { printf '  \033[33m!\033[0m %s\n      fix: %s\n' "$1" "$2"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+CD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+
+echo "Tools"
+for t in tmux flock git; do have $t && ok "$t" || bad "$t missing" "sudo apt-get install -y $( [ $t = flock ] && echo util-linux || echo $t )"; done
+have jq && ok "jq" || soft "jq missing (the mods installer needs it)" "sudo apt-get install -y jq"
+if have node; then v=$(node -p 'process.versions.node.split(".")[0]'); [ "$v" -ge 18 ] && ok "node $v" || bad "node $v is too old" "install Node 18 or newer"
+else soft "node missing (Ruflo and some MCP servers need it)" "sudo apt-get install -y nodejs npm"; fi
+have gh && ok "gh" || soft "gh missing (PRs in the projects hub)" "sudo apt-get install -y gh, then gh auth login"
+# shellcheck disable=SC2088  # "~" here is display text
+case ":$PATH:" in *":$HOME/.local/bin:"*) ok "~/.local/bin on PATH";; *) bad "~/.local/bin not on PATH" "echo 'export PATH=\"\$HOME/.local/bin:\$PATH\"' >> ~/.profile, then log in again";; esac
+
+echo "Claude Code"
+if have "${LK_CLAUDE%% *}"; then ok "$LK_CLAUDE found"
+  if claude auth status >/dev/null 2>&1; then ok "signed in"; else soft "not signed in" "run: claude   (and follow the login link)"; fi
+else bad "Claude Code not found ($LK_CLAUDE)" "curl -fsSL https://claude.ai/install.sh | bash"; fi
+
+echo "Kit"
+miss=0; for t in lead claude-tab report tab-watch heavy order; do [ -x "$(dirname "$0")/$t" ] || { bad "$t not installed" "re-run ./install.sh"; miss=1; }; done
+[ "$miss" = 0 ] && ok "kit tools in $(dirname "$0")"
+[ -f "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" ] && ok "config" || bad "no config" "re-run ./install.sh"
+for s in terminal-lead project-tab; do [ -f "$CD/skills/$s/SKILL.md" ] && ok "skill $s" || bad "skill $s missing" "re-run ./install.sh"; done
+grep -qs 'BEGIN pierce-skill-kit rules' "$CD/CLAUDE.md" && ok "rules in CLAUDE.md" || soft "rules not in $CD/CLAUDE.md" "re-run ./install.sh and answer y to the rules step"
+grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" && ok "tmux settings" || soft "tmux settings not loaded" "re-run ./install.sh (tmux step)"
+crontab -l 2>/dev/null | grep -q 'tab-watch' && ok "watchdog in cron" || soft "watchdog not scheduled" "re-run ./install.sh (watchdog step), or run tab-watch every 15 min"
+if [ -f "$CD/settings.json" ] && have jq; then
+  n=$(jq -r '.env.CLAUDE_CODE_PLUGIN_DIRS // ""' "$CD/settings.json" | tr ':' '\n' | grep -c 'pierce-skill-kit/mods' || true)
+  [ "$n" -gt 0 ] && ok "$n kit mod(s) enabled" || soft "no kit mods enabled" "mods/install.sh agent-board (see mods/README.md)"
+fi
+tmux has-session -t "$LK_HUB" 2>/dev/null && ok "lead session '$LK_HUB' running" || soft "lead not running" "run: lead"
+
+echo "Machine"
+disk=$(df -Pk "$HOME" | awk 'NR==2{print int($4/1048576)}'); [ "$disk" -ge 5 ] && ok "${disk} GB disk free" || soft "only ${disk} GB disk free" "free up space (builds and renders need room)"
+mem=$(awk '/MemAvailable/{print int($2/1048576)}' /proc/meminfo 2>/dev/null || echo 0); [ "$mem" -ge 2 ] && ok "${mem} GB RAM available" || soft "only ${mem} GB RAM available" "add swap (get.sh --vps) or a bigger server"
+
+[ "$fail" = 0 ] && echo "All required checks passed." || echo "Some required checks failed: see the fixes above."
+exit $fail

@@ -2,7 +2,24 @@
 # lead - start the LEAD session (tmux session $LK_HUB, window $LK_LEAD_WINDOW) or bring it back in this terminal.
 #   lead            start it if missing, then attach
 #   lead -d         start it detached (for scripts / cron / tests)
+#   lead doctor     check the setup and print fixes
+#   lead update     pull the latest kit, re-apply it, reload tmux   (--auto-on / --auto-off: daily at 05:00)
 . "$(dirname "$0")/lk-config"
+[ "$1" = doctor ] && exec "$(dirname "$0")/lk-doctor"
+if [ "$1" = update ] && [ "$2" = --auto-on ]; then   # daily auto-update at 05:00
+  (crontab -l 2>/dev/null | grep -v 'pierce-skill-kit auto-update'; echo "0 5 * * * $(dirname "$0")/lead update --quiet >/dev/null 2>&1 # pierce-skill-kit auto-update") | crontab - && echo "daily auto-update on (05:00)"; exit
+fi
+if [ "$1" = update ] && [ "$2" = --auto-off ]; then crontab -l 2>/dev/null | grep -v 'pierce-skill-kit auto-update' | crontab - && echo "auto-update off"; exit; fi
+if [ "$1" = update ]; then   # pull the latest kit, re-apply it, reload tmux live
+  kit=$(cat "$HOME/.config/pierce-skill-kit/kit-dir" 2>/dev/null) && [ -d "$kit/.git" ] || { echo "lead update: kit folder unknown; re-run its install.sh once" >&2; exit 1; }
+  before=$(git -C "$kit" rev-parse --short HEAD)
+  git -C "$kit" pull -q --ff-only || { echo "lead update: git pull failed (local changes in $kit?)" >&2; exit 1; }
+  ( cd "$kit" && sh ./install.sh --update ) >/dev/null || { echo "lead update: re-apply failed; run: sh $kit/install.sh --update" >&2; exit 1; }
+  tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
+  after=$(git -C "$kit" rev-parse --short HEAD)
+  [ "$before" = "$after" ] && echo "already up to date ($after)" || { echo "updated $before -> $after:"; git -C "$kit" log --oneline "$before..$after" | head -10; }
+  exit 0
+fi
 if ! tmux has-session -t "$LK_HUB" 2>/dev/null; then
   tmux new-session -d -s "$LK_HUB" -n "$LK_LEAD_WINDOW" -c "$LK_LEAD_DIR" "$LK_CLAUDE" || exit 1
   tmux set-window-option -t "$LK_LEAD" automatic-rename off >/dev/null
