@@ -26,7 +26,7 @@ command -v claude >/dev/null || echo "note: 'claude' not on PATH yet - install C
 
 mkdir -p "$BIN" "$CFG" "$CLAUDE_DIR/skills"
 for f in bin/*; do if [ -f "$f" ]; then put "$f" "$BIN/$(basename "$f")"; fi; done
-chmod +x "$BIN"/lk-doctor "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily
+chmod +x "$BIN"/claude-acct "$BIN"/lk-doctor "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily
 echo "tools  -> $BIN"
 skill() { # skill <name>: copy a whole skill folder; an existing different copy is kept as <name>.bak
   d="$CLAUDE_DIR/skills/$1"

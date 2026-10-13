@@ -1,0 +1,43 @@
+# Changelog
+
+Newest first. **Run this** lines are for people who already installed the kit.
+Watch this repo → Custom → Releases to get notified.
+
+## v0.2.0 (2026-10-13)
+### Added
+- **Separate Claude accounts** (`claude-acct`): personal / work accounts side by side with their own logins, your
+  skills and settings shared, `claude-tab -a <account>` for a tab on a chosen account, and each account's 5-hour /
+  weekly usage in a picker ([docs/accounts.md](docs/accounts.md)).
+- **Update notes**: this changelog, tagged releases, and `lead update` now prints what's new.
+
+**Run this:** `lead update`
+
+## v0.1.0 (2026-10-13)
+First public release. Everything below landed on the same day.
+
+### Added
+- **Easy setup:** one line on a fresh Ubuntu/Debian server
+  (`curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/get.sh | bash`), with
+  `--dry-run`, `--yes` and `--vps` (server hardening that asks per step and won't turn off password logins unless
+  your key login is confirmed). Also a cloud-init snippet and a devcontainer.
+- **`lead update`** (pull, re-apply, reload tmux live; `--auto-on` for daily) and **`lead doctor`** (checks the setup
+  and prints a fix for each problem).
+- **Usage bars** in the kit statusline: 5-hour and weekly plan usage, from Claude Code's own status-line data.
+- **Claude Code mods:** agent-board, model-map, projects-hub, statusline, the lead-guard / review-gate /
+  mail-no-links hooks, and `mods/extras.sh` for everything else we run (official plugins, Ponytail, MCP servers,
+  Jumping Rope, the usage MCP, Ruflo + a small overlay).
+- **18 more skills** (video and 3D production, QA and grading, web, decks), indexed in [SKILLS.md](SKILLS.md).
+- **Guides:** Windows, macOS, security (with rate-limit recipes and SOC 2 readiness), prompting, memory and context,
+  model routing (including what to do when a model refuses), loops, API stack.
+- README: 3D hero rendered in Blender by Claude, install-test badge (runs on every push), architecture diagram.
+
+### Fixed
+- **Copying in tmux no longer jumps** to the bottom; tmux's bright green borders and selection are now quiet grey.
+  On Windows Terminal, Shift+drag uses the terminal's own selection.
+- The installers refuse to write into a Claude config folder outside your home folder (a test run with a temporary
+  home could otherwise write into a real config).
+- `project-tab` skill frontmatter now parses with strict YAML.
+
+**Run this** (installed before `lead update` existed; once):
+`cd ~/pierce-skill-kit && git pull && sh install.sh --update && tmux source-file ~/.tmux.conf` and then from now on
+just `lead update`.

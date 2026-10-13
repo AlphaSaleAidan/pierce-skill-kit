@@ -20,8 +20,10 @@ tmux send -t t -X copy-selection-no-clear
 echo "ok: copy keeps scroll mode, buffer filled, borders grey, no green"
 # --- lead update: a new commit upstream lands on the next update, tmux reloads live
 cd /tmp/up && sed -i 's/fg=colour238/fg=colour240/' tmux/pierce-skill-kit.tmux.conf && echo "# v2 marker" >> skills/project-tab/SKILL.md && \
+  sed -i 's/^## v0.2.0/## v9.9.9 (test)\n- **Test entry** for the update notes.\n\n## v0.2.0/' CHANGELOG.md && \
   git -c user.name=t -c user.email=t@example.com commit -qam v2
 out=$(lead update) || fail "lead update"; echo "$out" | grep -q "updated .* -> " || fail "no update reported: $out"
+echo "$out" | grep -q "Test entry" || fail "what's new not printed: $out"
 [ "$(tmux show -gv pane-active-border-style)" = "fg=colour240" ] || fail "tmux not reloaded live"
 grep -q "v2 marker" ~/.claude/skills/project-tab/SKILL.md || fail "skill not refreshed"
 [ "$(lead update)" = "already up to date ($(git -C $HOME/kit rev-parse --short HEAD))" ] || fail "second update"

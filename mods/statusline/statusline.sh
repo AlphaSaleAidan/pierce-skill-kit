@@ -9,6 +9,10 @@ in=$(cat)
 dir=$(printf '%s' "$in" | jq -r '.workspace.current_dir // empty'); dir=${dir:-$PWD}
 model=$(printf '%s' "$in" | jq -r '.model.display_name // empty')
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/statusline; mkdir -p "$cache"
+# Save this account's latest plan usage for `claude-acct list` (main = ~/.claude, else the .claude-<name> folder).
+acct_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; acct_dir=${acct_dir%/}; acct=${acct_dir##*/.claude-}; [ "$acct_dir" = "$HOME/.claude" ] && acct=main
+rl=$(printf '%s' "$in" | jq -c '.rate_limits // empty' 2>/dev/null)
+if [ -n "$rl" ] && [ "$rl" != "{}" ]; then u=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit; mkdir -p "$u"; printf '%s' "$rl" > "$u/usage-$acct.json"; fi
 ck=$cache/$(printf '%s|%s|%s' "$dir" "$model" "${CLAUDE_CONFIG_DIR:-default}" | cksum | cut -d' ' -f1)
 if [ -f "$ck" ] && [ $(( $(date +%s) - $(stat -c %Y "$ck") )) -lt 30 ]; then cat "$ck"; exit 0; fi
 exec 3>&1 1>"$ck.$$"

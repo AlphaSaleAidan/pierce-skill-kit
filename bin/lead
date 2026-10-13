@@ -17,7 +17,11 @@ if [ "$1" = update ]; then   # pull the latest kit, re-apply it, reload tmux liv
   ( cd "$kit" && sh ./install.sh --update ) >/dev/null || { echo "lead update: re-apply failed; run: sh $kit/install.sh --update" >&2; exit 1; }
   tmux source-file "$HOME/.tmux.conf" 2>/dev/null || true
   after=$(git -C "$kit" rev-parse --short HEAD)
-  [ "$before" = "$after" ] && echo "already up to date ($after)" || { echo "updated $before -> $after:"; git -C "$kit" log --oneline "$before..$after" | head -10; }
+  if [ "$before" = "$after" ]; then echo "already up to date ($after)"; else
+    echo "updated $before -> $after. What's new:"
+    news=$(git -C "$kit" diff "$before" "$after" -- CHANGELOG.md | sed -n 's/^+\([^+].*\)/\1/p' | head -30)
+    if [ -n "$news" ]; then printf '%s\n' "$news"; else git -C "$kit" log --oneline "$before..$after" | head -10; fi
+  fi
   exit 0
 fi
 if ! tmux has-session -t "$LK_HUB" 2>/dev/null; then

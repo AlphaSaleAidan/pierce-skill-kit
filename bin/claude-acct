@@ -1,0 +1,47 @@
+#!/bin/sh
+# claude-acct - run separate Claude Code accounts for separate purposes (e.g. personal + work), each with its own
+# login and billing, sharing your skills, CLAUDE.md, agents, commands and settings.
+#   claude-acct                 pick an account (shows each one's last 5h / weekly usage) and start Claude on it
+#   claude-acct list            accounts + last seen usage
+#   claude-acct add <name>      create ~/.claude-<name>, share your setup into it, then sign in (/login) there
+#   claude-acct run <name> [args...]   start Claude on that account ("main" = ~/.claude)
+# Usage numbers are the 5-hour / weekly windows Claude Code itself reports to the status line (rate_limits), saved
+# by the kit statusline each time it draws; they show once you've used that account. Each account must be its own
+# legitimately owned and paid account: check Anthropic's terms for your plan.
+. "$(dirname "$0")/lk-config"
+MAIN=$HOME/.claude; CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit
+CLAUDE_BIN=${CLAUDE_BIN:-claude}
+# Never shared between accounts: logins, per-account state, locks and caches.
+PRIVATE='^(\.credentials\.json|\.claude\.json|.*cache.*|.*\.lock|.*status.*\.json|statsig|todos|shell-snapshots|ide)$'
+
+dir_of() { [ "$1" = main ] && echo "$MAIN" || echo "$HOME/.claude-$1"; }
+names() { echo main; for d in "$HOME"/.claude-*/; do [ -d "$d" ] && basename "$d" | sed 's/^\.claude-//'; done; }
+usage() { # usage <name>: "5h 23% · week 71% (2h ago)" from the statusline's saved rate_limits, or "no data yet"
+  f=$CACHE/usage-$1.json
+  [ -s "$f" ] && command -v jq >/dev/null || { echo "no data yet"; return; }
+  age=$(( ($(date +%s) - $(stat -c %Y "$f")) / 60 ))
+  jq -r --arg age "$age" '"5h \(.five_hour.used_percentage // "?" | if type=="number" then round else . end)% · week \(.seven_day.used_percentage // "?" | if type=="number" then round else . end)% (\($age)m ago)"' "$f"; }
+share() { # share <dir>: symlink everything shareable from ~/.claude into an account's dir
+  for e in "$MAIN"/* "$MAIN"/.[!.]*; do
+    [ -e "$e" ] || continue; item=$(basename "$e")
+    echo "$item" | grep -qE "$PRIVATE" && continue
+    [ -e "$1/$item" ] || [ -L "$1/$item" ] || ln -s "$e" "$1/$item"
+  done; }
+run() { d=$(dir_of "$1"); shift
+  [ -d "$d" ] || { echo "claude-acct: no account at $d (claude-acct add <name>)" >&2; exit 1; }
+  # shellcheck disable=SC2086  # CLAUDE_BIN may carry args
+  if [ "$d" = "$MAIN" ]; then exec env -u CLAUDE_CONFIG_DIR $CLAUDE_BIN "$@"; else exec env CLAUDE_CONFIG_DIR="$d" $CLAUDE_BIN "$@"; fi; }
+
+case $1 in
+  add) n=$2; echo "$n" | grep -qE '^[a-z0-9][a-z0-9-]{0,30}$' && [ "$n" != main ] || { echo "usage: claude-acct add <name>  (lowercase letters, digits, dashes)" >&2; exit 2; }
+    d=$(dir_of "$n"); mkdir -p "$MAIN" "$d"; chmod 700 "$d"; share "$d"
+    echo "account '$n' ready in $d (shares your skills, CLAUDE.md and settings). Sign in now: type /login in the Claude that opens."
+    run "$n";;
+  run) shift; [ -n "$1" ] || { echo "usage: claude-acct run <name> [args]" >&2; exit 2; }; for d in "$HOME"/.claude-*/; do [ -d "$d" ] && share "$d"; done; run "$@";;
+  list) for n in $(names); do printf '  %-10s %s\n' "$n" "$(usage "$n")"; done;;
+  "") i=0; for n in $(names); do i=$((i + 1)); printf '  %d) %-10s %s\n' "$i" "$n" "$(usage "$n")"; done
+    printf 'Account number (Enter = main): '; read -r k
+    n=$( [ -z "$k" ] && echo main || names | sed -n "${k}p" ); [ -n "$n" ] || { echo "no such number" >&2; exit 2; }
+    run "$n";;
+  *) sed -n 2,9p "$0"; exit 2;;
+esac

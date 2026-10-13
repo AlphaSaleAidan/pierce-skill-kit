@@ -15,7 +15,12 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-0087af?style=flat-square"></a>
   <a href="https://github.com/AlphaSaleAidan/pierce-skill-kit/actions/workflows/test.yml"><img alt="install test" src="https://img.shields.io/github/actions/workflow/status/AlphaSaleAidan/pierce-skill-kit/test.yml?branch=main&label=install%20test&style=flat-square"></a>
   <img alt="tmux + Claude Code" src="https://img.shields.io/badge/runs%20on-tmux%20%2B%20Claude%20Code-30363d?style=flat-square">
+  <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
+
+> **Latest (v0.2.0):** separate Claude accounts with per-account tabs and usage (`claude-acct`); update notes and releases.
+> **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
+> Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
 Run many Claude Code sessions at once without losing track of them. One **lead** session manages a set of
 **project tabs** in tmux: it writes briefs, hands them out, gets a report the moment anything finishes or
@@ -90,6 +95,7 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `order add\|done\|wait\|list` | ledger of your asks, closed only with proof |
 | `tab-watch` | watchdog: flags tabs idle with no report (not ones waiting on you) |
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
+| `claude-acct [add\|list\|run]` | separate Claude accounts for separate purposes, shared setup, per-account usage ([docs/accounts.md](docs/accounts.md)) |
 | `lead-daily [--summary]` | end-of-day digest of reports, open orders, briefs and decisions |
 
 ## Skills
@@ -116,6 +122,7 @@ projects, sessions, PRs, services), **statusline**, the **lead-guard**, **review
 - [docs/memory-and-context.md](docs/memory-and-context.md): file memory, the index, and keeping context across long sessions
 - [docs/api-stack.md](docs/api-stack.md): example services + env var names, and how to store keys by path
 - [docs/windows.md](docs/windows.md): Windows Terminal + ssh into your server, a `lead` shortcut, a tab per project
+- [docs/accounts.md](docs/accounts.md): separate Claude accounts (personal / work), per-account tabs and usage
 - [docs/macos.md](docs/macos.md): optional Terminal.app helpers (macOS-only)
 
 ## What's macOS-specific

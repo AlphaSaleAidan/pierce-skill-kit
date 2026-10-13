@@ -1,16 +1,16 @@
 #!/bin/sh
 # claude-tab - open a PROJECT TAB: a new window in the hub session running its own Claude Code.
-#   claude-tab <dir> [-n name] [-r session-id] [-p "first task"] [-m model] [-f]
+#   claude-tab <dir> [-n name] [-r session-id] [-p "first task"] [-m model] [-a account] [-f]
 #   -n tab label (default: folder name; use the PROJECT name, not the task)   -r resume that session
-#   -p start with this task   -m model   -f allow a 2nd tab in a folder another tab already works in
+#   -p start with this task   -m model   -a run on that Claude account (see claude-acct)   -f allow a 2nd tab in a folder another tab already works in
 # Refuses (exit 3) a duplicate tab name, an already-running resume id, or a folder that already has a tab:
 # brief the existing tab instead.
 . "$(dirname "$0")/lk-config"
 dir=$1; shift 2>/dev/null
 [ -d "$dir" ] || { echo "claude-tab: no such folder: $dir" >&2; exit 1; }
-name=$(basename "$dir"); resume=''; prompt=''; model=''; force=''
-while getopts n:r:p:m:f o; do
-  case $o in n) name=$OPTARG;; r) resume=$OPTARG;; p) prompt=$OPTARG;; m) model=$OPTARG;; f) force=1;; *) exit 1;; esac
+name=$(basename "$dir"); resume=''; prompt=''; model=''; force=''; acct=''
+while getopts n:r:p:m:a:f o; do
+  case $o in n) name=$OPTARG;; r) resume=$OPTARG;; p) prompt=$OPTARG;; m) model=$OPTARG;; a) acct=$OPTARG;; f) force=1;; *) exit 1;; esac
 done
 tmux has-session -t "$LK_HUB" 2>/dev/null || { echo "claude-tab: no '$LK_HUB' session - run: lead -d" >&2; exit 1; }
 real=$(realpath "$dir")
@@ -22,7 +22,7 @@ if [ -n "$resume" ] && ps -eo args | grep -v grep | grep -q -- "--resume $resume
 hit=$(echo "$existing" | awk -F'|' -v d="$real" '$3==d' | head -1)
 [ -n "$hit" ] && [ -z "$force" ] && { echo "claude-tab: tab \"$(echo "$hit" | cut -d'|' -f2)\" already works in $real - brief it, or -f if this is truly a separate project" >&2; exit 3; }
 # shellcheck disable=SC2086  # LK_CLAUDE may carry its own args
-set -- $LK_CLAUDE
+if [ -n "$acct" ]; then set -- "$(dirname "$0")/claude-acct" run "$acct"; else set -- $LK_CLAUDE; fi
 [ -n "$model" ] && set -- "$@" --model "$model"
 [ -n "$resume" ] && set -- "$@" --resume "$resume"
 [ -n "$prompt" ] && set -- "$@" "$prompt"
