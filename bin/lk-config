@@ -1,5 +1,5 @@
 # lk-config - sourced by every Pierce Skill Kit tool: loads your config, fills in defaults.
-# shellcheck shell=sh
+# shellcheck shell=sh disable=SC1090,SC2034  # the config path is chosen at run time; the tools use LK_LEAD
 [ -f "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" ] && . "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}"
 : "${LK_HOME:=$HOME/.pierce-skill-kit}" "${LK_HUB:=hub}" "${LK_LEAD_WINDOW:=Lead}" "${LK_LEAD_DIR:=$HOME}"
 : "${LK_CLAUDE:=claude}" "${LK_IDLE_MIN:=60}" "${LK_WATCH_IGNORE:=auto mode|bypass permissions|accept edits}"

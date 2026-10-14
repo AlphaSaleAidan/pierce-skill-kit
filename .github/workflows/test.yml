@@ -17,7 +17,9 @@ jobs:
             /mnt/tests/smoke.sh /mnt/tests/hook-test.sh /mnt/get.sh /mnt/bin/lk-doctor /mnt/mods/install.sh \
             /mnt/mods/extras.sh /mnt/mods/statusline/statusline.sh /mnt/hooks/review-gate.sh /mnt/hooks/mail-no-links.sh \
             /mnt/tests/get-test.sh /mnt/tests/update-test.sh /mnt/tests/mods-test.sh \
-            /mnt/bin/claude-acct /mnt/tests/accounts-test.sh /mnt/mods/bridge/bridge /mnt/mods/bridge/test/e2e.sh
+            /mnt/bin/claude-acct /mnt/tests/accounts-test.sh /mnt/mods/bridge/bridge /mnt/mods/bridge/test/e2e.sh \
+            /mnt/bin/lk-config /mnt/mods/agent-board/bin/health.sh /mnt/mods/ruflo/apply.sh \
+            /mnt/skills/remote-gpu-render/scripts/link_watch.sh /mnt/skills/studio-vfx/tools/encode_alpha.sh
       - name: hook test
         run: sh tests/hook-test.sh
       - name: fresh-install smoke test (clean container)
