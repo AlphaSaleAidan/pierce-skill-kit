@@ -3,6 +3,18 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.3.3 (2026-10-14)
+### Fixed
+- `claude-tab -a <account>` now refuses an account that doesn't exist before opening anything (it used to open a
+  window that closed by itself).
+
+### Changed
+- Many more tests: account name checks, live sharing, private files never linked, the picker; for the bridge,
+  unicode and very long messages, two sends at once, clear errors when the server can't be reached, MCP error
+  handling, and hostile-archive checks for the Windows client.
+
+**Run this:** `lead update`
+
 ## v0.3.2 (2026-10-14)
 ### Fixed
 - **Typing after a copy no longer opens tmux prompts.** After drag-copying, the pane stayed in scroll mode, so a

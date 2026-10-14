@@ -13,6 +13,7 @@ while getopts n:r:p:m:a:f o; do
   case $o in n) name=$OPTARG;; r) resume=$OPTARG;; p) prompt=$OPTARG;; m) model=$OPTARG;; a) acct=$OPTARG;; f) force=1;; *) exit 1;; esac
 done
 tmux has-session -t "$LK_HUB" 2>/dev/null || { echo "claude-tab: no '$LK_HUB' session - run: lead -d" >&2; exit 1; }
+[ -z "$acct" ] || [ "$acct" = main ] || [ -d "$HOME/.claude-$acct" ] || { echo "claude-tab: no account '$acct' (claude-acct add $acct)" >&2; exit 1; }
 real=$(realpath "$dir")
 existing=$(tmux list-windows -a -F '#{session_name}:#{window_index}|#{window_name}|#{pane_current_path}' 2>/dev/null | grep -v '^view-')
 hit=$(echo "$existing" | awk -F'|' -v n="$name" '$2==n' | head -1)
