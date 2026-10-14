@@ -3,6 +3,15 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.3.1 (2026-10-14)
+### Fixed
+- After the one-line setup, the "next steps" now tell you to run `. ~/.profile` (or log in again) when it just put
+  `~/.local/bin` on your PATH; before, `claude` and `lead` weren't found in that same shell.
+- `mac-tab` calls `tab-view` by its full path (a plain ssh command doesn't load your profile).
+- Docs now match the scripts everywhere: full tool table, install steps, broken links and a broken table cell fixed.
+
+**Run this:** `lead update`
+
 ## v0.3.0 (2026-10-13)
 ### Added
 - **The bridge** ([docs/bridge.md](docs/bridge.md)): Claude Code on your own Windows / Mac / Linux computer can message
