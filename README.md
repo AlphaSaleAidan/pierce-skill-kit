@@ -18,7 +18,7 @@
   <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
 
-> **Latest (v0.3.1):** fixes from a fresh-user audit (PATH hint after setup, docs match the scripts). **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead and shares a context folder, over SSH only.
+> **Latest (v0.3.2):** typing after a copy no longer opens tmux prompts. **v0.3.1:** audit fixes. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead and shares a context folder, over SSH only.
 > **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 

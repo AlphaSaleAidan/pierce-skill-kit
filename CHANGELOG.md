@@ -3,6 +3,14 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.3.2 (2026-10-14)
+### Fixed
+- **Typing after a copy no longer opens tmux prompts.** After drag-copying, the pane stayed in scroll mode, so a
+  `g` opened tmux's "goto line" prompt (and `f`/`t`/`r` did similar things). Now any ordinary key just leaves scroll
+  mode; arrows, PgUp/PgDn and the mouse wheel still scroll, `q` still leaves.
+
+**Run this:** `lead update`
+
 ## v0.3.1 (2026-10-14)
 ### Fixed
 - After the one-line setup, the "next steps" now tell you to run `. ~/.profile` (or log in again) when it just put

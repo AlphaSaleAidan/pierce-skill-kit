@@ -2,7 +2,7 @@
 # tmux copy behaviour + `lead update`, in a throwaway container:
 #   docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/update-test.sh
 set -e
-apt-get update -qq >/dev/null && apt-get install -y -qq tmux git procps jq >/dev/null
+apt-get update -qq >/dev/null && apt-get install -y -qq tmux git procps jq bsdutils >/dev/null
 fail() { echo "FAIL: $*"; exit 1; }
 cp -r /kit /tmp/up && cd /tmp/up && rm -rf .git && git init -q && git add -A && git -c user.name=t -c user.email=t@example.com commit -qm v1
 git clone -q /tmp/up $HOME/kit && cd $HOME/kit && sh install.sh --yes >/dev/null
@@ -18,6 +18,21 @@ tmux send -t t -X copy-selection-no-clear
 [ "$(tmux display -p -t t '#{pane_in_mode}')" = 1 ] || fail "copy left scroll mode (would jump)"
 [ -n "$(tmux show-buffer 2>/dev/null)" ] || fail "nothing copied"
 echo "ok: copy keeps scroll mode, buffer filled, borders grey, no green"
+# Key bindings only fire for keys a client types, so attach a real client in a pseudo-terminal and send keys with -K.
+TERM=xterm script -qfc "tmux attach -t t" /dev/null >/dev/null 2>&1 & sleep 1
+c=$(tmux list-clients -F '#{client_name}' | head -1); [ -n "$c" ] || fail "no client attached"
+press() { tmux send-keys -K -c "$c" "$@"; sleep 0.3; }
+for k in g f r x; do   # an ordinary key leaves scroll mode instead of opening a prompt
+  tmux copy-mode -t t; tmux send -t t -X -N 2 scroll-up; press "$k"
+  [ "$(tmux display -p -t t '#{pane_in_mode}')" = 0 ] || fail "key $k did not leave scroll mode"
+  [ "$(tmux display -p -c "$c" '#{client_prompt}' 2>/dev/null)" != 1 ] || fail "key $k opened a prompt"
+done
+tmux copy-mode -t t; tmux send -t t -X -N 4 scroll-up; press Up; press PPage
+[ "$(tmux display -p -t t '#{pane_in_mode}')" = 1 ] || fail "arrow/PgUp should keep scrolling"
+press q; [ "$(tmux display -p -t t '#{pane_in_mode}')" = 0 ] || fail "q should leave"
+EDITOR=vim tmux -L vi -f ~/.tmux.conf new -d -s v; [ "$(tmux -L vi show -gv mode-keys)" = emacs ] || fail "mode-keys not pinned"
+tmux -L vi kill-server
+echo "ok: g/f/r/x leave scroll mode (no prompts), arrows/PgUp keep it, q leaves, mode-keys pinned"
 # --- lead update: a new commit upstream lands on the next update, tmux reloads live
 cd /tmp/up && sed -i 's/fg=colour238/fg=colour240/' tmux/pierce-skill-kit.tmux.conf && echo "# v2 marker" >> skills/project-tab/SKILL.md && \
   sed -i 's/^## v0.2.0/## v9.9.9 (test)\n- **Test entry** for the update notes.\n\n## v0.2.0/' CHANGELOG.md && \
