@@ -71,9 +71,11 @@ Needs Linux, `tmux`, `flock` (util-linux) and [Claude Code](https://docs.claude.
 ```sh
 git clone https://github.com/AlphaSaleAidan/pierce-skill-kit && cd pierce-skill-kit && ./install.sh
 ```
-It puts the tools in `~/.local/bin`, the two skills in `~/.claude/skills`, a config at
-`~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the tmux settings, appending the
-rules to your `~/.claude/CLAUDE.md`, the watchdog cron, the macOS helpers, and the Claude Code mods. `--yes` / `--no` skip the questions.
+It puts the tools in `~/.local/bin`, the two lead/tab skills in `~/.claude/skills`, a config at
+`~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the other 18 skills, the tmux settings,
+appending the rules to your `~/.claude/CLAUDE.md`, the watchdog cron, the macOS helpers, the daily auto-update, the
+Claude Code mods and the extras. `--yes` (all) / `--no` (none) / `--defaults` (all but the macOS helpers,
+auto-update and extras; what `get.sh` uses) skip the questions.
 
 ## The workflow
 ```sh
@@ -88,10 +90,11 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | Tool | What it does |
 |---|---|
 | `lead [-d]` | start the lead session (`hub:Lead`) or bring it back in this terminal |
-| `claude-tab <dir> -n <name> [-p task] [-r id] [-m model]` | open a project tab; refuses a duplicate name/folder/session |
+| `lead doctor` / `lead update [--auto-on\|--auto-off]` | check the setup / pull the latest kit and re-apply it |
+| `claude-tab <dir> -n <name> [-p task] [-r id] [-m model] [-a account] [-f]` | open a project tab; refuses a duplicate name/folder/session (`-f`: allow a second tab in a folder) |
 | `tab-view <hub:N>` | look at one tab in this terminal without moving anyone else's view |
 | `brief-send <tab> <brief.md>` | point a tab at a brief file in one line |
-| `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead |
+| `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed` |
 | `order add\|done\|wait\|list` | ledger of your asks, closed only with proof |
 | `tab-watch` | watchdog: flags tabs idle with no report (not ones waiting on you) |
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
@@ -108,7 +111,8 @@ Plus recommended third-party skills (linked, not copied) and a router template: 
 ## Mods
 Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
 (live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
-projects, sessions, PRs, services), **statusline**, the **lead-guard**, **review-gate** and **mail-no-links** hooks, and
+projects, sessions, PRs, services), **statusline**, **bridge** (Claude Code on your own computer talks to the lead
+over SSH: [docs/bridge.md](docs/bridge.md)), the **lead-guard**, **review-gate** and **mail-no-links** hooks, and
 `mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping Rope, the usage MCP, Ruflo + overlay).
 
 ## Docs
@@ -136,6 +140,7 @@ sends a report and checks the watchdog flags an idle tab:
 ```sh
 docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/smoke.sh
 ```
+The other suites in `tests/` run the same way (each file's first lines show how), plus `sh mods/bridge/test/e2e.sh`.
 
 ## License
 MIT

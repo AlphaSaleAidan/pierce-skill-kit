@@ -1,7 +1,7 @@
 #!/bin/sh
 # Pierce Skill Kit installer. Safe to re-run: it backs up anything it would overwrite and never edits a file twice.
 #   ./install.sh            ask before each optional step
-#   ./install.sh --yes      do every optional step (rules into CLAUDE.md, tmux config, watchdog cron, macOS helpers)
+#   ./install.sh --yes      do every optional step (all skills, tmux, rules, watchdog, macOS helpers, auto-update, mods, extras)
 #   ./install.sh --no       core only: tools, skills, config
 #   ./install.sh --defaults everything except the macOS helpers, the extras and auto-update (what get.sh uses)
 #   ./install.sh --update   refresh what is already installed, no questions (what `lead update` runs)

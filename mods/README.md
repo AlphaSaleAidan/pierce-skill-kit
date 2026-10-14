@@ -12,7 +12,7 @@ The Claude Code mods that run alongside the lead + tabs setup. Each installs wit
 | **statusline** | Folder, git branch + uncommitted count, model and config folder; plus hub counts and an overload warning when projects-hub / agent-board are installed. Cached 30 s so many tabs stay cheap. | `mods/install.sh statusline` |
 | **bridge** | Your local Claude Code talks to the server's lead over SSH: `bridge send` / `inbox` / `sync`, an MCP server (send_to_lead, read_inbox, share_context, pull_context), a shared context folder that never syncs secrets, optional locked-down key. [docs/bridge.md](../docs/bridge.md) | `sh mods/bridge/bridge setup me@my-server` (Windows: `bridge.ps1 setup`) |
 | **lead-guard** hook | Stops the lead doing project work with its own subagents (READ-ONLY research allowed). Needs the kit's core install. | `mods/install.sh hook lead-guard` |
-| **review-gate** hook | Blocks `pm2`/`systemctl restart|reload` of apps you list until a recent independent review is recorded. | `mods/install.sh hook review-gate` |
+| **review-gate** hook | Blocks `pm2`/`systemctl` `restart`/`reload` of apps you list until a recent independent review is recorded. | `mods/install.sh hook review-gate` |
 | **mail-no-links** hook | Refuses mail sends/drafts with links through a connector that rewrites links. Give it your mail tool names. | `mods/install.sh hook mail-no-links 'mcp__mail__send_message\|mcp__mail__create_draft'` |
 | **retitle-sessions** tool | Backfills topic titles for past sessions (one small Haiku call each). | `python3 mods/tools/retitle-sessions.py --dry --limit 5` |
 

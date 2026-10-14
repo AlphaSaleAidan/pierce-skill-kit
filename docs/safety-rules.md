@@ -19,7 +19,8 @@ hold because Claude reads them.
 
 ## The lead hook
 Blocks the lead from spawning worker subagents (so project work lands in project tabs, where it's visible).
-Subagents whose prompt starts with `READ-ONLY` are allowed. Add to `~/.claude/settings.json`:
+Subagents whose prompt starts with `READ-ONLY` (and the read-only `Explore` agent) are allowed.
+`mods/install.sh hook lead-guard` sets it up; or add it to `~/.claude/settings.json` yourself:
 
 ```json
 { "hooks": { "PreToolUse": [ { "matcher": "Agent|Task",
