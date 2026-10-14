@@ -2,8 +2,8 @@
 
 Everything in `skills/` was written for real production work and then generalized: no client names, no
 private infra, placeholders where you plug in your own values. Each folder is a standard Claude Code skill
-(`SKILL.md` + small scripts/references). Copy the ones you want into `~/.claude/skills/`. A ready
-use-case → skill table lives in [`skill-router.md`](skill-router.md).
+(`SKILL.md` + small scripts/references). `./install.sh` offers to install them all, or copy the ones you want into
+`~/.claude/skills/`. A ready use-case → skill table lives in [`templates/skill-router.md`](templates/skill-router.md).
 
 Scripts marked **untested as generalized** in their own `Status` section were rewritten from job scripts
 without a fresh end-to-end run. Try them on a few frames first.
