@@ -58,7 +58,8 @@ if [ "$need_claude" = 1 ]; then
   say "Installing Claude Code"
   run bash -c 'curl -fsSL https://claude.ai/install.sh | bash' || { warn "official installer failed, trying npm"; srun npm install -g @anthropic-ai/claude-code; }
 fi
-case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH"
+new_path=0
+case ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) export PATH="$HOME/.local/bin:$PATH"; new_path=1
   grep -qs 'local/bin' "$HOME/.profile" || { echo 'export PATH="$HOME/.local/bin:$PATH"' >> "$HOME/.profile"; echo "  + added ~/.local/bin to PATH in ~/.profile"; };; esac
 
 # ---------- 3. the kit ----------
@@ -113,6 +114,7 @@ fi
 
 # ---------- 5. next steps ----------
 say "Done. Next:"
+[ "$new_path" = 1 ] && echo "  0. . ~/.profile      # or log in again: puts ~/.local/bin (claude, lead) on this shell's PATH"
 echo "  1. claude            # sign in once (opens a login link)"
 echo "  2. lead              # start the lead session"
 echo "  3. lead doctor       # check everything is set up"
