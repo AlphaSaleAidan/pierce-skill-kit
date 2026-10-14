@@ -6,7 +6,7 @@
 . "$(dirname "$0")/lk-config"
 [ -n "$LK_MAC_SSH" ] && [ -n "$LK_BOX_SSH" ] || { echo "mac-tab: set LK_MAC_SSH and LK_BOX_SSH in the config" >&2; exit 1; }
 target=$1; title=${2:-$1}
-cmd="$LK_BOX_SSH tab-view $target"
+cmd="$LK_BOX_SSH .local/bin/tab-view $target"   # full path: a plain ssh command does not read ~/.profile
 # shellcheck disable=SC2086
 out=$($LK_MAC_SSH "osascript \
   -e 'tell application \"Terminal\" to activate' \
