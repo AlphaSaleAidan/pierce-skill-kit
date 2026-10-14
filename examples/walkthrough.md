@@ -27,7 +27,7 @@ The tabs work (skill `project-tab`) and report:
 The lead opens the preview itself, then tells the human in three lines: checkout is fixed (link), and
 one question about the import. `order done 1 "preview checked"`. `order wait 2 "date-format decision"`.
 
-Forty minutes later the acme-app tab has gone quiet with nothing to do; the watchdog says so:
+Over an hour later the acme-app tab has gone quiet with nothing to do; the watchdog says so:
 ```
 [WATCH] tab 'acme-app' (hub:2) is idle with no report in the last 60 min. Check it: finished, stuck, or waiting on the human?
 ```
