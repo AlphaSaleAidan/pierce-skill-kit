@@ -27,6 +27,7 @@ nothing silently stuck, the human told only what changed, every claim verified.
 - A follow-up that changes an in-flight task = an `UPDATE n` section in that task's brief, quoting the
   human verbatim. Never stack unrelated decisions onto an old brief.
 - Decisions the human makes: quote them verbatim in the brief + one line in `$LK_HOME/decisions.md`.
+- Priority changes say so explicitly: "PRIORITY: do X before Y".
 
 ## 4. Orders: every ask is tracked to done
 - The moment the human asks for something: `order add <project> "<ask>"`.
@@ -52,13 +53,23 @@ nothing silently stuck, the human told only what changed, every claim verified.
 - Routine (decide, tell after): test plans, rubric fixes, copy accuracy, which tab does what, order of work.
 - Bring to the human: anything sent outside, prod deploys/merges, money/spend, legal risk, deleting data,
   reversing a decision they made. A tab can't grant these approvals to another tab.
+- A tab asking "should I?" on a routine call gets an answer the same turn.
 
 ## 8. Monitor round (in order)
 1. Load and RAM: overloaded → pause non-`heavy` jobs by PID, resume when it drops, tell the tab.
 2. Tabs: list them; fix duplicates/dead windows.
 3. `order list`: chase stalled orders, close finished ones with proof.
-4. Each tab: stuck on a prompt? idle with work queued? finished → report or close.
-5. Spend: any metered API running without a dollar-quoted OK → stop it.
-6. Tell the human ≤3 lines, only if something changed.
+4. Projects file (`$LK_HOME/projects.md`): one row per project/client — status, next step, waiting on.
+   A row with no movement in 48 h → nudge its tab or flag it.
+5. Each tab: stuck on a prompt? idle with work queued? finished → report or close.
+6. Spend: any metered API running without a dollar-quoted OK → stop it.
+7. Automations (cron jobs, heartbeats): check their output, not just that they ran.
+8. Tell the human ≤3 lines, only if something changed.
 
+Remote probes (e.g. a Mac over ssh) only when needed; if that machine is loaded, stop probing it.
 Don't run rounds on a short timer. Reports and `[WATCH]` lines wake you; see docs/loops.md.
+
+## 9. Machine hygiene
+- Never `pkill` by name: find the PID that owns the port, check its working directory, then kill that PID.
+- CPU-heavy jobs go through `heavy` (one at a time, niced). Never load a machine you don't own.
+- Daemons: `setsid nohup <cmd> < /dev/null &`, then take the real PID from `ps`.

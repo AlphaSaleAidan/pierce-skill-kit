@@ -2,6 +2,8 @@
 Rule: match the use-case, invoke the skill, say which in one line. Two fit → the more specific wins.
 Nothing fits → say so and proceed. Only list skills that are actually installed.
 Third-party names below are suggestions (see SKILLS.md for sources); delete rows you don't have.
+`skill-route-sync` appends every other installed skill in an auto section at the bottom and keeps it current;
+move a row up here (by hand) once you use it often.
 
 ## Use-case → engine (optional, if you also run Codex)
 | Job | Engine |
@@ -37,6 +39,13 @@ Third-party names below are suggestions (see SKILLS.md for sources); delete rows
 | Edit real footage by conversation | `video-use` (third-party) |
 | New marketing site or "remake this website" | `website-build` (+ `design-motion-principles` for motion) |
 | Pitch / sales deck | `deck` |
+| Same-day prep for a booked sales meeting (site + deck + demo phone agent) | `sales-appointment-prep` |
+| Which of your separate Claude accounts a tab or job runs on | `claude-accounts` |
+| Give a collaborator a walled-off workspace on your server | `collab-sandbox` |
+| Put a consenting person into footage you own | `person-into-existing-scene` |
+| iOS / SwiftUI code (Apple's Xcode 27 guidance) | `swiftui-specialist`, `swiftui-whats-new-27`, `uikit-app-modernization` (third-party) |
+| Before an App Store submission | `review-readiness-check`, then the matching review audit (third-party) |
+| Reverse-engineer a shipped binary or package (no source) | `reverse-engineer-anything` (REA, third-party); not for normal source repos |
 | Grade or improve a Vapi phone agent | `phone-qa` (+ Vapi's own prompt-builder skill) |
 | Hard bug / perf regression | <your debugging skill> |
 | Review a diff before merge | <your code-review skill> + `codex` review on money paths |

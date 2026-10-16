@@ -9,6 +9,7 @@ Scripts marked **untested as generalized** in their own `Status` section were re
 without a fresh end-to-end run. Try them on a few frames first.
 
 ## Lead & tabs
+_Lead model: Opus._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
 | `terminal-lead` | How the lead session runs tabs, briefs, orders and reports | Every lead monitor round | this kit, tmux |
@@ -16,6 +17,7 @@ without a fresh end-to-end run. Try them on a few frames first.
 | `codex` | Hands a build, fix round or adversarial review to a Codex model; Claude keeps the brief, secrets and verification | Big builds, mechanical grinds, second-model review of money-path diffs | Codex CLI + an OpenAI account |
 
 ## Quality & grading
+_Lead model: Sonnet grades, Opus fixes._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
 | `video-qc-reviewer` | Fresh-eyes frame-by-frame QC: machine checks, contact sheets, client-zoom crops, a severity-ranked findings table | Before any video goes to a client, or when "it looks off" | ffmpeg, Python (OpenCV, Pillow) |
@@ -23,6 +25,7 @@ without a fresh end-to-end run. Try them on a few frames first.
 | `phone-qa` | Grades a Vapi phone agent against a written bar: programmatic call grader, simulated test callers, rubric judge, capped fix loop | After building a phone agent, or when it "sounds robotic/laggy" | Vapi API key; test calls are metered (dry run prints the cost first) |
 
 ## Video & 3D production
+_Lead model: Opus directs, Sonnet runs QC/sweeps._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
 | `commercial-production-pipeline` | The gates for a client video job: brief, reference breakdown, storyboard sign-off, build, QC, review rounds, delivery rules | Any client ad/spot/edit end to end, or a job stuck in revision loops | — (links the specialist skills) |
@@ -36,21 +39,28 @@ without a fresh end-to-end run. Try them on a few frames first.
 | `ai-video-logo-replace` | Swap a wrong printed logo on an AI clip without regenerating: HSV detect, track, inpaint, multiply-blend | A good generation came back with the wrong label | Python (OpenCV, Pillow), ffmpeg |
 | `beat-synced-overlays` | Kick-scored flash frames, double exposures and ghost overlays as a separate overlay pass | A montage feels flat or accents land off the beat | Python (numpy/scipy, Pillow) |
 | `remote-gpu-render` | Run FaceFusion / Real-ESRGAN / Seed-VC on a Windows NVIDIA PC you own over SSH; CUDA gotchas; verify from the output file | A GPU job is too slow on a CPU server | A Windows PC with an NVIDIA card, OpenSSH |
+| `person-into-existing-scene` | Replaces the lead performer in footage you own or licensed with a **consenting** person: identity-edit stills → image-to-video → performer-only composite over the original plates | Re-casting your own spot, personalising a commercial you own; face swaps look fake | the person's written consent + rights to the footage; Higgsfield or similar (paid); Python (opencv, onnxruntime, insightface, rembg), ffmpeg |
 
 ## Design & web
+_Lead model: Opus._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
 | `website-build` | Recipe for a premium marketing/ecommerce site that doesn't read as AI-generated: direction pass, real assets, React/Vite/Tailwind/GSAP/Lenis build, visual verify | New site, landing page, or "remake this website" | Node, Playwright; optional image/video generation API |
 
 ## Sales & decks
+_Lead model: Opus builds, Sonnet researches._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
 | `deck` | Pitch-deck pipeline: sourced brief → build → capture every slide → rubric grade → fix rounds until every slide passes → share only a link that returns 200 | "Build/finish/grade the deck" | Node + Playwright, Python; a vision-capable reviewer subagent |
+| `sales-appointment-prep` | Same-day demo package for a booked sales meeting: sourced research, plan, tailored site + pitch deck, demo phone agent, test-grade-fix loop on the live URLs | A rep has a meeting with a named local business today | `website-build`, `deck`, `phone-qa`; Node + Playwright; a preview host; a voice-agent account (metered) |
 
 ## Ops & accounts
+_Lead model: Sonnet._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
 | `credit-discipline-for-generation` | Storyboard + quote before spend, cheapest probe first, stills before video, a credit log that doubles as the invoice line | Before spending any paid generation credits or metered API calls | — |
+| `claude-accounts` | Picks which of your separate, legitimately owned Claude accounts a session, tab or headless job runs on, and reads each account's usage from Claude Code's own `rate_limits` | Starting cron/`claude -p` jobs, opening a tab on a specific account, "how much usage is left" | this kit (`claude-acct`, `claude-tab -a`), statusline mod, jq |
+| `collab-sandbox` | Walled-off workspace for a collaborator: hardened browser-IDE container with Claude Code under their own login, firewall to the internet only, optional per-person spending cap for a paid generation API | Onboarding or revoking a contractor/editor on your server | Linux server, Docker, iptables, a browser-IDE image; each collaborator's own Claude account |
 
 ## Recommended third-party skills
 Installed alongside these and worth having. Link, don't copy — install from the source. Licenses below were
@@ -75,6 +85,19 @@ read from the LICENSE file each project ships; "see repo" means not verified her
 | resend, resend-cli, react-email | https://github.com/resend/resend-skills | MIT |
 | supabase, supabase-postgres-best-practices | https://github.com/supabase/agent-skills | MIT |
 | higgsfield-generate, higgsfield-soul-id, … | https://github.com/higgsfield-ai/skills | MIT |
-| remotion-* | https://github.com/remotion-dev/skills | see repo |
-| vercel-react-best-practices, web-design-guidelines, … | https://github.com/vercel-labs/agent-skills | see repo |
-| frontend-design, skill-creator, mcp-builder | https://github.com/anthropics/skills | see repo (varies per skill) |
+| remotion-* | https://github.com/remotion-dev/skills | not stated (no LICENSE file; Remotion has its own license) |
+| vercel-react-best-practices, web-design-guidelines, … | https://github.com/vercel-labs/agent-skills | MIT (stated in README) |
+| frontend-design, skill-creator, mcp-builder, webapp-testing | https://github.com/anthropics/skills | Apache-2.0 for these (per-skill LICENSE); docx/pdf/pptx/xlsx there are source-available, not open source |
+
+### Added in v0.4.0
+| Skills | What we use them for | Source | License | Install |
+|---|---|---|---|---|
+| Xcode 27 guidance (7): `swiftui-specialist`, `swiftui-whats-new-27`, `uikit-app-modernization`, `test-modernizer`, `device-interaction`, `c-bounds-safety`, `audit-xcode-security-settings` | SwiftUI/UIKit code review and SDK 27 compile errors, test migration, checking a build on the simulator | https://github.com/superagents-lab/xcode27-skills | none granted (Apple-written text, link only) | `npx skills add superagents-lab/xcode27-skills --skill '*'` |
+| App Store review audits (31): `review-readiness-check`, `iap-compliance`, `privacy-manifest-check`, `account-deletion-check`, `metadata-accuracy`, … | Catch rejection reasons before you submit; start with `review-readiness-check` | https://github.com/cruisediary/apple-app-review-skills | MIT | `curl -fsSL https://raw.githubusercontent.com/cruisediary/apple-app-review-skills/main/install.sh \| bash` (read it first) |
+| REA: `reverse-engineer-anything` | Explain or compare a shipped binary, package, Electron app or firmware when there's no source. **Skip it for normal source repos**: "For ordinary analysis of a complete source repository, use normal repository tools" | https://github.com/morluto/rea | MIT | `npx rea-agents setup` (also registers its MCP server) |
+| hyperframes (plugin: video from HTML, captions, launch videos, slideshows) | Code-made videos and motion graphics | https://github.com/heygen-com/hyperframes | Apache-2.0 | `claude plugin marketplace add heygen-com/hyperframes && claude plugin install hyperframes@hyperframes` |
+| huashu-design | HTML prototypes, slides and design reviews (three directions first) | https://github.com/alchaincyf/huashu-design | MIT | `npx skills add alchaincyf/huashu-design` |
+| openai/skills (15): `playwright`, `screenshot`, `gh-fix-ci`, `gh-address-comments`, `security-threat-model`, `security-best-practices`, `transcribe`, `speech`, … | Browser proof, CI fixes, threat models, transcription | https://github.com/openai/skills | Apache-2.0 (per skill) | `npx skills add openai/skills` |
+
+Install with `skill-add` instead of `npx skills add` and the new skills are routed straight away (see
+[docs/skill-routing.md](docs/skill-routing.md)). Licenses were read from each project's LICENSE or README on 2026-10-16.

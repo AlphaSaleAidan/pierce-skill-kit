@@ -18,7 +18,7 @@
   <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
 
-> **Latest (v0.3.3):** `claude-tab -a` checks the account first; many more tests. **v0.3.2:** typing after a copy no longer opens tmux prompts. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead and shares a context folder, over SSH only.
+> **Latest (v0.4.0):** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
 > **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -72,7 +72,7 @@ Needs Linux, `tmux`, `flock` (util-linux) and [Claude Code](https://docs.claude.
 git clone https://github.com/AlphaSaleAidan/pierce-skill-kit && cd pierce-skill-kit && ./install.sh
 ```
 It puts the tools in `~/.local/bin`, the two lead/tab skills in `~/.claude/skills`, a config at
-`~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the other 18 skills, the tmux settings,
+`~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the other 22 skills, daily skill routing, the tmux settings,
 appending the rules to your `~/.claude/CLAUDE.md`, the watchdog cron, the macOS helpers, the daily auto-update, the
 Claude Code mods and the extras. `--yes` (all) / `--no` (none) / `--defaults` (all but the macOS helpers,
 auto-update and extras; what `get.sh` uses) skip the questions.
@@ -100,19 +100,24 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
 | `claude-acct [add\|list\|run]` | separate Claude accounts for separate purposes, shared setup, per-account usage ([docs/accounts.md](docs/accounts.md)) |
 | `lead-daily [--summary]` | end-of-day digest of reports, open orders, briefs and decisions |
+| `skill-route-sync [--confirm name] [--dry-run]` / `skill-add <owner/repo>` | route every installed skill in your skill router; install skills and route them |
 
 ## Skills
-Beyond the two lead/tab skills, 18 skills we wrote ourselves, grouped and indexed in [SKILLS.md](SKILLS.md):
+Beyond the two lead/tab skills, 22 skills we wrote ourselves, grouped and indexed in [SKILLS.md](SKILLS.md):
 quality and grading (video QC, lip-sync/gaze QC, phone-agent QA), video and 3D production (commercial pipeline,
 Blender sets from storyboards, green-screen comps, kinetic type, beat-synced overlays, logo fixes, voice conversion
-with consent), design and web (site build), decks, Codex hand-offs, and credit discipline for paid generation.
-Plus recommended third-party skills (linked, not copied) and a router template: [templates/skill-router.md](templates/skill-router.md).
+with consent, putting a consenting person into your own footage), design and web (site build), decks and same-day
+sales-meeting prep, Codex hand-offs, separate Claude accounts, collaborator sandboxes, and credit discipline for paid generation.
+Plus recommended third-party skills (linked, not copied, with license and install line) and a router template:
+[templates/skill-router.md](templates/skill-router.md). `skill-route-sync` keeps your router current as you install skills
+([docs/skill-routing.md](docs/skill-routing.md)).
 
 ## Mods
 Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
 (live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
 projects, sessions, PRs, services), **statusline**, **bridge** (Claude Code on your own computer talks to the lead
-over SSH: [docs/bridge.md](docs/bridge.md)), the **lead-guard**, **review-gate** and **mail-no-links** hooks, and
+over SSH: [docs/bridge.md](docs/bridge.md)), **skill-recommender** (asks "Switch to `<skill>`?" when an installed
+skill fits a tough task better), the **lead-guard**, **review-gate** and **mail-no-links** hooks, and
 `mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping Rope, the usage MCP, Ruflo + overlay).
 
 ## Docs
@@ -120,6 +125,7 @@ over SSH: [docs/bridge.md](docs/bridge.md)), the **lead-guard**, **review-gate**
 - [docs/model-routing.md](docs/model-routing.md): which model for which job, and why it saves tokens
 - [docs/loops.md](docs/loops.md): grading loops and wait loops that don't run away
 - [docs/report-protocol.md](docs/report-protocol.md) · [docs/briefs.md](docs/briefs.md) · [docs/skill-routing.md](docs/skill-routing.md)
+- [docs/toolbelt.md](docs/toolbelt.md): MCP servers vs CLIs, keys by path, capped headless runs
 - [docs/security.md](docs/security.md): agent security, rate-limit recipes (Express, Next.js, nginx), app basics, SOC 2 audit-readiness
 - [docs/safety-rules.md](docs/safety-rules.md): what the tools enforce vs what's on Claude, plus the optional lead hook
 - [docs/prompting.md](docs/prompting.md): briefs, talking to Claude, graders, subagents, creative prompts, dictation

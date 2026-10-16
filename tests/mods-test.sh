@@ -2,7 +2,7 @@
 # Mods installer round trip + hook behaviour, in a throwaway container:
 #   docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/mods-test.sh
 set -e
-apt-get update -qq >/dev/null && apt-get install -y -qq jq >/dev/null
+apt-get update -qq >/dev/null && apt-get install -y -qq jq nodejs >/dev/null
 export HOME=/tmp/h; mkdir -p $HOME; cp -r /kit /tmp/kit; cd /tmp/kit
 S=$HOME/.claude/settings.json
 fail() { echo "FAIL: $*"; cat "$S"; exit 1; }
@@ -22,6 +22,12 @@ echo '{"tool_input":{"command":"pm2 restart shop-api"}}' | REVIEW_GATED=shop-api
 touch /tmp/review-ok-shop-api
 [ -z "$(echo '{"tool_input":{"command":"pm2 restart shop-api"}}' | REVIEW_GATED=shop-api REVIEW_MARKERS=/tmp sh $HOME/.config/pierce-skill-kit/hooks/review-gate.sh)" ] || fail "review gate after review"
 echo "ok: hooks block and allow correctly"
+sh mods/install.sh skill-recommender >/dev/null; sh mods/install.sh skill-recommender >/dev/null   # twice: no duplicates
+for ev in UserPromptSubmit PostToolUse PostToolUseFailure; do [ "$(jq ".hooks.$ev | length" $S)" = 1 ] || fail "skill-recommender $ev"; done
+c=$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].command' $S)
+echo '{"session_id":"t","prompt":"yes"}' | $c | grep -q . && fail "recommender hook fired on yes"
+echo "ok: skill-recommender hooks installed once and run"
+sh mods/install.sh skill-recommender --uninstall >/dev/null
 for m in agent-board model-map projects-hub statusline; do sh mods/install.sh $m --uninstall >/dev/null; done
 for h in lead-guard review-gate mail-no-links; do sh mods/install.sh hook $h --uninstall >/dev/null; done
 [ "$(jq -c . $S)" = '{"env":{"CLAUDE_CODE_PLUGIN_DIRS":""},"hooks":{"PreToolUse":[]}}' ] || fail "uninstall left: $(jq -c . $S)"

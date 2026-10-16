@@ -3,6 +3,33 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.4.0 (2026-10-16)
+### Added
+- **4 skills** (22 in all): `claude-accounts` (which of your separate, legitimately owned accounts a tab or job runs
+  on; usage from Claude Code's own data, no automatic switching), `collab-sandbox` (a walled-off workspace for a
+  collaborator, under their own Claude login), `sales-appointment-prep` (same-day site + deck + demo phone agent for a
+  booked meeting), `person-into-existing-scene` (a consenting person into footage you own; written consent required).
+- **New skills get routed automatically:** `skill-route-sync` reads every installed skill (yours, `npx skills`,
+  plugins) and keeps an auto section at the bottom of `~/.claude/skill-router.md` current, with a guessed category
+  marked "auto, review" until you confirm it. Your hand-written rows are never touched. Runs on install, on
+  `lead update`, daily (if you say yes) and after `skill-add <owner/repo>`. [docs/skill-routing.md](docs/skill-routing.md)
+- **skill-recommender mod:** on a tough task, or when a task fails twice, Claude asks you once: "Switch to `<skill>`?".
+  Local keyword match, no API, quiet on short replies, logs answers (`recommend.js stats`). Graded by an independent
+  reviewer on 54 prompts: 86% of suggestions sensible, 0 fires on 20 short replies; it misses some fits rather than
+  guess. `mods/install.sh skill-recommender`
+- **Third-party skills linked** in SKILLS.md, with license and install line: Apple's Xcode 27 guidance (7), App Store
+  review audits (31), REA (reverse-engineer-anything), hyperframes, huashu-design, openai/skills (15). Licenses for
+  remotion, vercel-labs and anthropics entries checked.
+- [docs/toolbelt.md](docs/toolbelt.md): MCP servers vs CLIs, MCP config that holds a path not a key, `${VAR}` headers,
+  tool output as data, capped `claude -p` runs.
+
+### Changed
+- `terminal-lead` and `project-tab`: newer rules (priority lines, check automations' output, queue when the machine is
+  overloaded, machine hygiene: no killing processes by name, heavy jobs through `heavy`).
+- SKILLS.md sections say which model leads each kind of work; the router template lists the new skills.
+
+**Run this:** `lead update` (then `mods/install.sh skill-recommender` if you want the recommender)
+
 ## v0.3.3 (2026-10-14)
 ### Fixed
 - `claude-tab -a <account>` now refuses an account that doesn't exist before opening anything (it used to open a

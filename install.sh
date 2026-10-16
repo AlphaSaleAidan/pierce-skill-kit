@@ -26,7 +26,7 @@ command -v claude >/dev/null || echo "note: 'claude' not on PATH yet - install C
 
 mkdir -p "$BIN" "$CFG" "$CLAUDE_DIR/skills"
 for f in bin/*; do if [ -f "$f" ]; then put "$f" "$BIN/$(basename "$f")"; fi; done
-chmod +x "$BIN"/claude-acct "$BIN"/lk-doctor "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily
+chmod +x "$BIN"/claude-acct "$BIN"/lk-doctor "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily "$BIN"/skill-route-sync "$BIN"/skill-add
 echo "tools  -> $BIN"
 skill() { # skill <name>: copy a whole skill folder; an existing different copy is kept as <name>.bak
   d="$CLAUDE_DIR/skills/$1"
@@ -39,18 +39,27 @@ put tmux/pierce-skill-kit.tmux.conf "$CFG/pierce-skill-kit.tmux.conf"
 mkdir -p "$CFG/hooks"; put hooks/lead-no-worker-agents.sh "$CFG/hooks/lead-no-worker-agents.sh"; chmod +x "$CFG/hooks/lead-no-worker-agents.sh"
 echo "config -> $CFG/config"
 pwd > "$CFG/kit-dir"   # where `lead update` pulls from
+route_sync() { # keep ~/.claude/skill-router.md in step with the installed skills (hand-written rows are never touched)
+  [ -f "$CLAUDE_DIR/skill-router.md" ] || cp templates/skill-router.md "$CLAUDE_DIR/skill-router.md"
+  if command -v node >/dev/null; then "$BIN/skill-route-sync" --quiet | sed 's/^/router -> /'; else echo "router -> skipped: skill-route-sync needs Node"; fi; }
 
 if [ "$mode" = update ]; then   # refresh only what is already installed
   for d in "$CLAUDE_DIR"/skills/*/; do n=$(basename "$d"); [ -d "skills/$n" ] && skill "$n"; done
   for d in "$CFG"/mods/*/; do n=$(basename "$d"); [ -d "mods/$n" ] && { rm -rf "$d"; cp -r "mods/$n" "$CFG/mods/$n"; }; done
   for f in "$CFG"/hooks/*.sh; do [ -f "hooks/$(basename "$f")" ] && put "hooks/$(basename "$f")" "$f"; done
   echo "update -> refreshed installed skills, mods and hooks"
+  route_sync
   exit 0
 fi
 
 if ask "Install the other $(($(ls -d skills/*/ | wc -l) - 2)) skills (video/3D production, QA and grading, decks, web; see SKILLS.md)?"; then
   for s in skills/*/; do n=$(basename "$s"); case $n in terminal-lead|project-tab) ;; *) skill "$n";; esac; done
   echo "skills -> all of skills/ (index: SKILLS.md)"
+fi
+route_sync
+if command -v crontab >/dev/null && command -v node >/dev/null && ask "Route newly installed skills every day (skill-route-sync at 05:10 updates your skill router)?"; then
+  (crontab -l 2>/dev/null | grep -v 'pierce-skill-kit skill-route-sync'; echo "10 5 * * * $BIN/skill-route-sync --quiet >/dev/null 2>&1 # pierce-skill-kit skill-route-sync") | crontab -
+  echo "cron   -> daily skill-route-sync"
 fi
 if ask "Use the Pierce Skill Kit tmux settings (mouse scroll/copy, LEADER marker)?"; then
   grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" || echo "source-file $CFG/pierce-skill-kit.tmux.conf" >> "$HOME/.tmux.conf"
@@ -74,8 +83,8 @@ if command -v crontab >/dev/null && ask "Update the kit automatically every day 
   echo "cron   -> daily auto-update"
 fi
 if ! command -v jq >/dev/null; then echo "mods   -> skipped: needs jq (then: mods/install.sh <name>)"
-elif ask "Install the Claude Code mods (agent-board, model-map, projects-hub, statusline)? Hooks: see mods/README.md"; then
-  for m in agent-board model-map projects-hub statusline; do sh mods/install.sh "$m" | sed 's/^/mods   -> /'; done
+elif ask "Install the Claude Code mods (agent-board, model-map, projects-hub, statusline, skill-recommender)? Hooks: see mods/README.md"; then
+  for m in agent-board model-map projects-hub statusline skill-recommender; do sh mods/install.sh "$m" | sed 's/^/mods   -> /'; done
 fi
 if ask "Install everything else this setup runs (plugins, Ponytail, MCP servers, Jumping Rope, usage MCP, Ruflo)? It asks per group"; then
   if [ "$mode" = yes ]; then sh mods/extras.sh --yes; else sh mods/extras.sh; fi

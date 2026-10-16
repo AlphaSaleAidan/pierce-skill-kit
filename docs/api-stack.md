@@ -4,6 +4,8 @@ A typical set of services behind a lead + tabs setup, what each is for, and how 
 need most of them; start with the core table. **No key value ever goes in a repo, chat, screenshot or recording.** Costs are rough (Oct 2026); check each pricing page before you sign up.
 Env var names are the usual ones each tool's SDK/CLI reads. Keep them consistent so scripts work everywhere.
 
+How to plug these into Claude safely (MCP vs CLI, keys by path, capped headless runs): [toolbelt.md](toolbelt.md).
+
 ## Core
 | Service | What it's for here | Rough cost | Get the key | Env var |
 |---|---|---|---|---|

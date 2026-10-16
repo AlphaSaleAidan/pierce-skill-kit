@@ -1,0 +1,198 @@
+#!/usr/bin/env node
+// skill-route-sync: scan every installed skill's SKILL.md (name + description), rebuild the skill index,
+// and keep an auto-generated section of the skill router in step with what's installed.
+//
+//   skill-route-sync                 scan, write the index, update the router's auto section, print new/removed
+//   skill-route-sync --dry-run       print what would change, write nothing
+//   skill-route-sync --confirm NAME [CATEGORY]   mark an auto row as reviewed (optionally re-categorise it)
+//   skill-route-sync --kit DIR       also check DIR/skills/* against DIR/SKILLS.md and write DIR/skills/index.json
+//   skill-route-sync --quiet         only print when something changed
+//
+// Files (override with env):
+//   SKILL_DIRS       colon-separated skill roots   (default ~/.claude/skills:~/.agents/skills + plugin skills)
+//   SKILL_INDEX      the index                      (default ~/.claude/skill-index.json)
+//   SKILL_ROUTER     the router markdown            (default ~/.claude/skill-router.md)
+//   SKILL_CONFIRMED  reviewed categories, JSON      (default ~/.claude/skill-routes.confirmed.json)
+// Hand-written router rows are never touched: only the block between the two markers is rewritten, and any skill
+// already named in backticks elsewhere in the router is left out of it.
+'use strict';
+const fs = require('fs'), path = require('path'), os = require('os');
+const HOME = os.homedir();
+const CLAUDE = process.env.CLAUDE_CONFIG_DIR || path.join(HOME, '.claude');
+const INDEX = process.env.SKILL_INDEX || path.join(CLAUDE, 'skill-index.json');
+const ROUTER = process.env.SKILL_ROUTER || path.join(CLAUDE, 'skill-router.md');
+const CONFIRMED = process.env.SKILL_CONFIRMED || path.join(CLAUDE, 'skill-routes.confirmed.json');
+const START = '<!-- skill-route-sync:auto start -->', END = '<!-- skill-route-sync:auto end -->';
+
+const args = process.argv.slice(2);
+const flag = f => args.includes(f);
+const opt = f => { const i = args.indexOf(f); return i >= 0 ? args[i + 1] : undefined; };
+const DRY = flag('--dry-run'), QUIET = flag('--quiet');
+
+// ---- categories: [name, lead engine, words in the skill NAME (strong), words in the description] ----
+// Score = 3 per name hit + 1 per distinct description hit; highest wins, ties go to the earlier row.
+const CATS = [
+  ['Lead & tabs', 'Opus', /(lead|tab|handoff|worktree|parallel-agents|accounts|sandbox)/i,
+    /\b(lead session|project tabs?|tmux|subagents?|parallel agents|hand ?off|worktrees?|claude accounts?|collaborator)\b/gi],
+  ['Apple & iOS', 'Opus', /(swift|uikit|xcode|ios|ipad|apple|storekit|-audit$|-check$|-compliance$|-disclosure$)/i,
+    /\b(swift(ui)?|uikit|xcode|ios|ipad|app store|app review|storekit|guideline \d[\d.]*|privacy manifest|testflight|visionos|watchos|simulator)\b/gi],
+  ['Engineering process', 'Opus', /(plan|spec|implement|superpowers|brainstorm|pr-|merge|refactor|simplif|architecture|ponytail|tickets|triage|goal|tdd|wizard)/i,
+    /\b(plan|spec|implementation|refactor|pull request|pr\b|merge conflicts?|code ?base|architecture|minimal diff|tickets?|requirements|brainstorm)/gi],
+  ['Security & review', 'Opus', /(security|review|find-bugs|scanner|threat|reverse-engineer|firewall|guardrail)/i,
+    /\b(security|vulnerab\w*|code review|review (a |the )?(diff|pr|branch|changes)|find bugs|threat model|reverse engineer\w*|decompil\w*|exploit\w*|audit)\b/gi],
+  ['Video & 3D production', 'Sonnet', /(video|remotion|hyperframes|higgsfield|blender|vfx|lip|voice|beat|caption|clip|footage|watch|transcrib|speech|slideshow|kinetic|gpu)/i,
+    /\b(video|footage|clips?|blender|3d|vfx|composit\w*|lip|voice|audio|music|captions?|subtitles?|montage|motion graphics?|commercial|storyboard|frames?)\b/gi],
+  ['Design & web', 'Opus', /(design|taste|ui|frontend|gsap|motion|redesign|website|brutalist|minimalist|image-to-code|shadcn|perf|react|next|view-transitions)/i,
+    /\b(design|ui|ux|landing pages?|website|css|tailwind|front-?end|gsap|scroll\w*|typograph\w*|react|next\.?js|animations?|layout|core web vitals)\b/gi],
+  ['Quality & grading', 'Sonnet', /(test|qa|qc|verif|debug|diagnos|lint|playwright|screenshot|grade)/i,
+    /\b(tests?|testing|tdd|qa|qc|grade[rs]?|grading|verify|verification|lint|debug\w*|diagnos\w*|regressions?|screenshots?)\b/gi],
+  ['Sales & marketing', 'Sonnet', /(seo|marketing|ads|ad-|copy|cro|pricing|prospect|cold-email|launch|sales|deck|churn|referral|onboarding|paywall|popups|social|offers|signup|lead-magnets|revops|attribution|ab-testing|competitor|customer|set-prep|emails|sms)/i,
+    /\b(marketing|seo|copy(writing)?|ads?|campaigns?|cold email|prospect\w*|pricing|cro|conversions?|launch|sales|deck|pitch|churn|referrals?|onboarding|paywalls?|social)\b/gi],
+  ['Data & backend', 'Opus', /(supabase|postgres|n8n|stripe|resend|cloudflare|workers|wrangler|durable|vercel|api|sdk|mcp|webhook|metronome|shippo|vapi|assistant|call|campaign|squad|phone|tool$|email-service|queue|storage|functions|sandbox|middleware|cache|auth|env|deploy|gateway)/i,
+    /\b(database|postgres|supabase|sql|apis?|backend|workers?|durable objects?|cloudflare|n8n|workflows?|stripe|payments?|resend|webhooks?|mcp|serverless|vercel|deploy\w*)\b/gi],
+  ['Docs & writing', 'Sonnet', /(doc|readme|pdf|docx|pptx|xlsx|writ|prompt|agents-md|claude-md|changelog|questionnaire|notebook)/i,
+    /\b(docs?|documents?|documentation|readme|pdf|docx|pptx|xlsx|spreadsheets?|writing|prompts?|agents\.md|claude\.md|changelog)\b/gi],
+  ['Ops & accounts', 'Sonnet', /(config|settings|access|hook|cron|credit|usage|budget|setup|install|git-)/i,
+    /\b(cron|servers?|vps|ssh|gpu|credits?|spend|budget|usage|install\w*|config\w*|settings|hooks?|permissions?)\b/gi],
+];
+function categorise(name, desc) {
+  const bare = name.includes(':') ? name.split(':').pop() : name;
+  let best = { category: 'Other', engine: 'Sonnet' }, top = 0;
+  for (const [cat, engine, nameRe, descRe] of CATS) {
+    const hits = new Set((desc.match(descRe) || []).map(w => w.toLowerCase())).size;
+    const score = (nameRe.test(bare) ? 3 : 0) + hits;
+    if (score > top) { top = score; best = { category: cat, engine }; }
+  }
+  return best;
+}
+
+// ---- frontmatter: name + description (handles quoted, folded >- / | and plain multi-line values) ----
+function frontmatter(file) {
+  let txt; try { txt = fs.readFileSync(file, 'utf8'); } catch { return null; }
+  const m = txt.match(/^---\r?\n([\s\S]*?)\r?\n---/); if (!m) return null;
+  const out = {}, lines = m[1].split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    const kv = lines[i].match(/^(name|description):\s*(.*)$/); if (!kv) continue;
+    let v = kv[2].trim();
+    if (/^[>|][-+]?$/.test(v) || v === '') {           // block scalar or value on the following indented lines
+      const buf = []; while (i + 1 < lines.length && /^\s+\S/.test(lines[i + 1])) buf.push(lines[++i].trim());
+      v = buf.join(' ');
+    }
+    out[kv[1]] = v.replace(/^["']|["']$/g, '').replace(/\\"/g, '"').trim();
+  }
+  return out.name ? out : null;
+}
+
+// ---- scan ----
+function roots() {
+  if (process.env.SKILL_DIRS) return process.env.SKILL_DIRS.split(':').filter(Boolean).map(d => ({ dir: d, plugin: null }));
+  const r = [{ dir: path.join(CLAUDE, 'skills'), plugin: null }, { dir: path.join(HOME, '.agents', 'skills'), plugin: null }];
+  // plugin skills: the installed plugins' own folders (installed_plugins.json lists their install paths)
+  try {
+    const ip = JSON.parse(fs.readFileSync(path.join(CLAUDE, 'plugins', 'installed_plugins.json'), 'utf8'));
+    for (const [id, entries] of Object.entries(ip.plugins || {}))
+      for (const e of [].concat(entries)) if (e && e.installPath) r.push({ dir: path.join(e.installPath, 'skills'), plugin: id.split('@')[0] });
+  } catch {}
+  return r;
+}
+function scan() {
+  const skills = {};
+  for (const { dir, plugin } of roots()) {
+    let names; try { names = fs.readdirSync(dir); } catch { continue; }
+    for (const n of names) {
+      const fm = frontmatter(path.join(dir, n, 'SKILL.md')); if (!fm) continue;
+      const key = plugin ? `${plugin}:${fm.name}` : fm.name;
+      if (skills[key]) continue;                         // first root wins (~/.claude/skills over ~/.agents/skills)
+      skills[key] = { name: key, description: fm.description || '', source: plugin ? `plugin:${plugin}` : dir.replace(HOME, '~') };
+    }
+  }
+  return skills;
+}
+
+function readJSON(f, dflt) { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return dflt; } }
+function write(f, s) { if (DRY) return; fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f + '.tmp', s); fs.renameSync(f + '.tmp', f); }
+const cell = s => String(s).replace(/\|/g, '/').replace(/\s+/g, ' ').trim();
+const short = s => { s = cell(s); const first = s.split(/(?<=\.)\s/)[0]; return (first.length > 150 ? first.slice(0, 147) + '…' : first); };
+
+// ---- confirm mode ----
+if (opt('--confirm')) {
+  const name = opt('--confirm'), conf = readJSON(CONFIRMED, {});
+  const cat = args[args.indexOf('--confirm') + 2];
+  const known = CATS.map(c => c[0]).concat('Other');
+  if (cat && !cat.startsWith('--') && !known.includes(cat)) { console.error(`unknown category "${cat}". One of: ${known.join(', ')}`); process.exit(2); }
+  const prev = readJSON(INDEX, { skills: {} }).skills[name];
+  if (!prev) { console.error(`no skill "${name}" in ${INDEX}; run skill-route-sync first`); process.exit(2); }
+  conf[name] = cat && !cat.startsWith('--') ? cat : prev.category;
+  write(CONFIRMED, JSON.stringify(conf, null, 2) + '\n');
+  console.log(`confirmed ${name} -> ${conf[name]}`);
+  // fall through to a normal sync so the router drops the "review" flag
+}
+
+// ---- build index ----
+const confirmed = readJSON(CONFIRMED, {});
+const engineOf = cat => (CATS.find(c => c[0] === cat) || [0, 'Sonnet'])[1];
+const prev = readJSON(INDEX, { skills: {} });
+const found = scan();
+for (const s of Object.values(found)) {
+  const guess = categorise(s.name, s.description);
+  if (confirmed[s.name]) Object.assign(s, { category: confirmed[s.name], engine: engineOf(confirmed[s.name]), reviewed: true });
+  else Object.assign(s, guess, { reviewed: false });
+}
+const added = Object.keys(found).filter(k => !prev.skills[k]).sort();
+const removed = Object.keys(prev.skills).filter(k => !found[k]).sort();
+const index = { generated: new Date().toISOString(), count: Object.keys(found).length, categories: CATS.map(c => c[0]).concat('Other'), skills: found };
+write(INDEX, JSON.stringify(index, null, 1) + '\n');
+
+// ---- router auto section ----
+let router = '', routerChanged = false;
+try { router = fs.readFileSync(ROUTER, 'utf8'); } catch {}
+if (router || !fs.existsSync(ROUTER)) {
+  const hand = router.includes(START) ? router.slice(0, router.indexOf(START)) + router.slice(router.indexOf(END) + END.length) : router;
+  const named = new Set([...hand.matchAll(/`([a-z0-9:_.-]+)/gi)].map(m => m[1]));
+  const bare = n => n.includes(':') ? n.split(':').pop() : n;
+  // a plugin copy of a skill that's also installed directly (plugin:x and x) is listed once, as x
+  const auto = Object.values(found).filter(s => !named.has(s.name) && !named.has(bare(s.name)) && !(s.name.includes(':') && found[bare(s.name)]));
+  const byCat = {};
+  for (const s of auto) (byCat[s.category] = byCat[s.category] || []).push(s);
+  let block = `${START}\n## Auto-routed skills (skill-route-sync)\n_Generated ${index.generated.slice(0, 10)} from ${index.count} installed skills; ` +
+    `${auto.length} not named in the hand-written tables above. "auto, review" = category guessed from the description; ` +
+    `confirm with \`skill-route-sync --confirm <name> [category]\`. Edit the tables above by hand, never this block._\n`;
+  for (const cat of index.categories) {
+    const rows = (byCat[cat] || []).sort((a, b) => a.name.localeCompare(b.name)); if (!rows.length) continue;
+    block += `\n### ${cat} (lead: ${engineOf(cat)})\n| Skill | Use it for | Status |\n|---|---|---|\n`;
+    for (const s of rows) block += `| \`${s.name}\` | ${short(s.description)} | ${s.reviewed ? 'reviewed' : 'auto, review'} |\n`;
+  }
+  block += END;
+  const next = router.includes(START)
+    ? router.slice(0, router.indexOf(START)) + block + router.slice(router.indexOf(END) + END.length)
+    : (router ? router.replace(/\s*$/, '\n\n') : '# Skill router\n\n') + block + '\n';
+  const strip = s => s.replace(/_Generated \d{4}-\d\d-\d\d/, '');   // a date-only change isn't a change
+  routerChanged = strip(next) !== strip(router);
+  if (routerChanged) write(ROUTER, next);
+}
+
+// ---- kit maintainer check ----
+const kit = opt('--kit');
+let kitMsg = '';
+if (kit) {
+  const md = fs.readFileSync(path.join(kit, 'SKILLS.md'), 'utf8');
+  const own = fs.readdirSync(path.join(kit, 'skills')).filter(n => fs.existsSync(path.join(kit, 'skills', n, 'SKILL.md'))).sort();
+  const data = own.map(n => { const fm = frontmatter(path.join(kit, 'skills', n, 'SKILL.md')) || { name: n, description: '' };
+    const c = confirmed[fm.name] ? { category: confirmed[fm.name] } : categorise(fm.name, fm.description || "");
+    return { name: fm.name, description: cell(fm.description), category: c.category, inSkillsMd: md.includes('`' + n + '`') }; });
+  write(path.join(kit, 'skills', 'index.json'), JSON.stringify({ count: data.length, skills: data }, null, 1) + '\n');
+  const missing = data.filter(d => !d.inSkillsMd).map(d => d.name);
+  kitMsg = `kit: ${data.length} skills -> skills/index.json` + (missing.length ? `; NOT in SKILLS.md: ${missing.join(', ')}` : '; all listed in SKILLS.md');
+  if (missing.length) process.exitCode = 1;
+}
+
+// ---- report ----
+const changed = added.length || removed.length || routerChanged;
+if (!QUIET || changed || kitMsg) {
+  console.log(`${DRY ? '[dry run] ' : ''}${index.count} skills indexed -> ${INDEX.replace(HOME, '~')}`);
+  if (added.length) console.log(`new (${added.length}):\n` + added.map(n => `  + ${n}  [${found[n].category}${found[n].reviewed ? '' : ', auto, review'}]`).join('\n'));
+  if (removed.length) console.log(`gone (${removed.length}):\n` + removed.map(n => `  - ${n}`).join('\n'));
+  if (routerChanged) console.log(`router auto section updated -> ${ROUTER.replace(HOME, '~')}`);
+  else if (!added.length && !removed.length) console.log('no changes');
+  if (kitMsg) console.log(kitMsg);
+}

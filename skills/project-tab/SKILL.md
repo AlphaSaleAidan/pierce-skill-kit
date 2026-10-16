@@ -22,7 +22,10 @@ Goal: **high-quality work at a good pace.** Neither alone counts.
 - **Use them for:** parallel lanes, audits over many files, independent graders/reviewers, research, test writing.
 - **Model:** see docs/model-routing.md. Short version: the strongest model for hard builds, money/data
   paths and grading; a mid model for research, verification, sweeps and tests; the smallest for lookups.
-- **Limits:** ≤3 subagents at once per tab; ≤1 doing CPU-heavy work, always via `heavy`.
+- **Limits:** ≤3 subagents at once per tab; ≤1 doing CPU-heavy work, always via `heavy`. If the machine is
+  already overloaded, queue the work instead of adding to it.
+- **Unnamed** subagents for one-shots (named ones can report twice). No forks unless the work truly needs
+  your full context.
 - **Brief them fully:** goal, files, constraints, done-when, exact report shape. They don't see your context.
 - **You stay accountable:** read every result, verify its claims (spot-check data, look at the screenshot,
   run the test). Never forward a subagent's self-grade as fact.
@@ -49,6 +52,7 @@ Goal: **high-quality work at a good pace.** Neither alone counts.
 - Branch → preview → human's OK → main/prod. Reversible changes (flags, archive) over destructive ones.
 - Never test on live money flows. Nothing goes to clients/partners without the human's OK in that moment.
 - No metered spend without a dollar-quoted OK. Secrets by path only. Never `pkill` by name.
+- No jobs on machines you don't own.
 
 ## 7. Report shape
 3–8 lines, plain words: result first, then proof (link/commit/count/screenshot path), then open decisions
