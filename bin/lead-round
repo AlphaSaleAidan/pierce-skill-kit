@@ -1,0 +1,41 @@
+#!/bin/sh
+# lead-round - one screen of facts for the lead's monitor round (terminal-lead skill §2). Red lines start with !.
+# Read-only: it changes nothing. Heartbeats to watch: LK_HEARTBEATS="path:max_minutes ..." in the config.
+. "$(dirname "$0")/lk-config"
+R=$LK_HOME/reports.tsv; now=$(date +%s)
+mins() { echo $(( (now - $1) / 60 )); }
+echo "## Machine"
+load=$(cut -d' ' -f1 /proc/loadavg 2>/dev/null); cpus=$(nproc 2>/dev/null || echo 1)
+mem=$(awk '/^MemAvailable:/{print int($2/1024)}' /proc/meminfo 2>/dev/null)
+over=$(awk -v l="${load:-0}" -v c="$cpus" 'BEGIN{print (l > c * 1.5) ? 1 : 0}')
+{ [ "$over" = 1 ] || [ "${mem:-99999}" -lt "$LK_MIN_FREE_MB" ]; } && p='! ' || p='  '
+echo "${p}load ${load:-?} on $cpus cpus, ${mem:-?} MB free"
+echo "## Orders"
+"$(dirname "$0")/order" list | sed 's/^/  /'
+echo "## Tabs"
+tmux has-session -t "$LK_HUB" 2>/dev/null || echo "! no '$LK_HUB' session: run lead"
+tmux list-windows -t "$LK_HUB" -F '#{window_name}|#{window_activity}|#{pane_current_path}' 2>/dev/null | while IFS='|' read -r name act dir; do
+  [ "$name" = "$LK_LEAD_WINDOW" ] && continue
+  row=$(awk -F'\t' -v t="$name" '$6==t{x=$1"|"$3} END{print x}' "$R" 2>/dev/null)
+  last=${row#*|}; at=${row%%|*}; ago=''
+  [ -n "$row" ] && { s=$(date -u -d "$at" +%s 2>/dev/null) && ago=" $(mins "$s") min ago"; }
+  dirty=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l)
+  tail=$(tmux capture-pane -p -t "$LK_HUB:$name" -S -8 2>/dev/null)
+  p='  '; note=''
+  printf '%s' "$tail" | grep -qE 'Do you want|\(y/n\)|❯ [0-9]\.|Enter to confirm' && { p='! '; note=' WAITING ON A PROMPT'; }
+  [ "$dirty" -gt 0 ] && [ "$(mins "$act")" -ge 120 ] && { p='! '; note="$note $dirty uncommitted, quiet"; }
+  echo "${p}$name: quiet $(mins "$act") min, last report ${last:-none}$ago${note}"
+done
+echo "## Jobs"
+"$(dirname "$0")/job" list | sed -E 's/^(.* (failed|died) .*)$/! \1/; t; s/^/  /'
+echo "## Heartbeats"
+[ -n "$LK_HEARTBEATS" ] || echo "  (none set: LK_HEARTBEATS=\"path:max_minutes ...\")"
+for hb in $LK_HEARTBEATS; do f=${hb%:*}; max=${hb##*:}
+  if [ ! -s "$f" ]; then echo "! $f: missing or empty"
+  else age=$(mins "$(stat -c %Y "$f")"); [ "$age" -gt "$max" ] && echo "! $f: $age min old (max $max)" || echo "  $f: $age min old"; fi
+done
+echo "## Tunnels"
+t=$(ps -eo pid=,args= | grep -E 'cloudflared|ngrok|ssh .*-R ' | grep -v grep | cut -c1-100)
+[ -n "$t" ] && printf '%s\n' "$t" | sed 's/^/  /' || echo "  none"
+echo "## Sweep (dry run)"
+"$(dirname "$0")/tab-sweep" --dry-run | sed -E 's/^(FLAG.*)$/! \1/; t; s/^/  /'

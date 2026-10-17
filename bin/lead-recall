@@ -1,0 +1,15 @@
+#!/bin/sh
+# lead-recall <words...> - search everything already said before asking the human again: decisions, briefs,
+# reports, orders, retired tabs and Claude memory files. Every word must appear on the line (any order, any case).
+#   lead-recall domain landing      -> file:line: matching lines, newest files first
+. "$(dirname "$0")/lk-config"
+[ $# -gt 0 ] || { sed -n 2,4p "$0"; exit 2; }
+CD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+files=$( { ls -t "$LK_HOME"/decisions.md "$LK_HOME"/*.md "$LK_HOME"/reports.tsv "$LK_HOME"/orders.tsv "$LK_HOME"/briefs/*.md \
+  "$CD"/projects/*/memory/*.md "$CD"/memory/*.md "$CD"/CLAUDE.md 2>/dev/null; } | awk '!seen[$0]++')
+[ -n "$files" ] || { echo "lead-recall: nothing recorded yet"; exit 1; }
+hits=$(echo "$files" | while read -r f; do
+  awk -v f="$f" -v words="$*" 'BEGIN{n=split(tolower(words),w," ")} {l=tolower($0); ok=1; for(i=1;i<=n;i++) if (index(l,w[i])==0) {ok=0; break}
+    if (ok) printf "%s:%d: %s\n", f, FNR, substr($0,1,220)}' "$f"; done)
+[ -n "$hits" ] || { echo "lead-recall: nothing on \"$*\" (try fewer or other words)"; exit 1; }
+printf '%s\n' "$hits" | head -n "${LK_RECALL_MAX:-40}"

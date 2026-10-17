@@ -14,8 +14,12 @@ raw=$(
     END {for (k in n) if (t[k] || r[k]) printf "- %s: %d of %d reports were \"done\" without solid proof, %d claimed a deploy/send/merge\n", k, t[k]+0, n[k], r[k]+0}' "$LK_HOME/report-checks.tsv" 2>/dev/null
   echo "## Jobs"
   "$(dirname "$0")/job" list
+  echo "## Waiting on you, or open more than 24 h"
+  "$(dirname "$0")/order" list | grep -E ' waiting | OLD ' || echo "(none)"
   echo "## Open orders"
   "$(dirname "$0")/order" list
+  echo "## Bold ideas from the tabs (pitch the best one or two)"
+  awk -F'\t' -v s="$since" 'NR>1 && $1>=s && index($4,"BOLD NEXT:") {sub(/.*BOLD NEXT: */,"",$4); printf "- %s: %s\n",$2,$4}' "$LK_HOME/reports.tsv" 2>/dev/null
   echo "## Briefs written"
   find "$LK_HOME/briefs" -name '*.md' -newermt '24 hours ago' -printf '- %f\n' 2>/dev/null | sort
   [ -f "$LK_HOME/decisions.md" ] && { echo "## Decisions (last 20)"; tail -n 20 "$LK_HOME/decisions.md"; }

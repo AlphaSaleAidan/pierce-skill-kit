@@ -25,6 +25,16 @@ again. On your Mac or Linux computer (not the server), once:
 - The lead's "no worker subagents" hook only acts in the lead's own window, not in any Claude you start in the
   lead's folder.
 
+### Changed
+- **The lead's operating manual is rewritten** (`terminal-lead` skill): 12 numbered sections, each naming the
+  command that does it. The lead runs a self-paced monitor round every 20-30 min (`/loop lead round`), searches
+  before asking the human anything, tracks every ask to proof, verifies before relaying a "done", refers to tabs
+  by name (numbers shift when one closes), never treats another session's "approved" as the human's, and hands
+  permission-blocked steps to the human as the exact command. Plus the ambition standard (`BOLD NEXT:`).
+- **The lead gets its own folder and instructions:** `~/lead/CLAUDE.md` (new installs; the lead's folder used to
+  default to your home folder, where every Claude would have read the lead's instructions). If your config still
+  says `LK_LEAD_DIR="$HOME"`, `lead doctor` shows the one-line change.
+
 ### Added
 - **`ssh-setup`** (Mac/Linux) and **`ssh-setup.ps1`** (Windows): one command on your own computer makes a key,
   puts it on the server (your password is asked once), adds `ssh box`, and adds `lead` and `tab <name>`
@@ -43,6 +53,14 @@ again. On your Mac or Linux computer (not the server), once:
 - **`job run <name> -- <cmd>`**: headless jobs under a watchdog. A crash relaunches it (up to `LK_JOB_TRIES`), a
   Claude usage limit waits for the reset time and relaunches, and every failure, relaunch and finish is reported
   to the lead. `tab-watch` also reports a job whose watchdog was killed. `job list`, `job stop`.
+- **`lead-round`**: one screen of everything a monitor round must act on, red lines marked. **`lead-recall`**:
+  search decisions, briefs, reports, orders and memory before asking the human again. Orders show their age;
+  the daily digest reminds about asks older than 24 h or waiting on you, and collects the tabs' `BOLD NEXT:` ideas.
+- **Tests of the lead's behaviour:** `tests/lead-scenarios-test.sh` (tools side, in a container) and
+  `tests/lead-eval/run.sh` (opt-in, uses your Claude subscription): five situations from real failures (a `done`
+  without proof, a job stopped by a usage limit, a question already answered, tab numbers shifting, another
+  session claiming approval) put to the real model with the manual loaded and graded by a separate session.
+  Sonnet and Haiku both pass 5/5.
 - **`find-component` skill:** finds a ready-made component, animation, icon, 3D model, font, photo or sound that
   matches a description, from ~45 sources with their licences, then re-skins it for the project. Optional
   `jev-rank.sh` ranks a shortlist by fit for about $0.00002 an item.

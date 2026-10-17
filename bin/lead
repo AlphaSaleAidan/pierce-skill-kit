@@ -25,6 +25,7 @@ if [ "$1" = update ]; then   # pull the latest kit, re-apply it, reload tmux liv
   exit 0
 fi
 if ! tmux has-session -t "$LK_HUB" 2>/dev/null; then
+  mkdir -p "$LK_LEAD_DIR"
   tmux new-session -d -s "$LK_HUB" -n "$LK_LEAD_WINDOW" -c "$LK_LEAD_DIR" "$LK_CLAUDE" || exit 1
   tmux set-window-option -t "$LK_LEAD" automatic-rename off >/dev/null
   echo "started the lead ($LK_LEAD)"

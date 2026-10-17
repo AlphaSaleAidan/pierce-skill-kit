@@ -29,6 +29,9 @@ miss=0; for t in lead claude-tab report tab-watch heavy order; do [ -x "$(dirnam
 [ -f "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" ] && ok "config" || bad "no config" "re-run ./install.sh"
 for s in terminal-lead project-tab; do [ -f "$CD/skills/$s/SKILL.md" ] && ok "skill $s" || bad "skill $s missing" "re-run ./install.sh"; done
 grep -qs 'BEGIN pierce-skill-kit rules' "$CD/CLAUDE.md" && ok "rules in CLAUDE.md" || soft "rules not in $CD/CLAUDE.md" "re-run ./install.sh and answer y to the rules step"
+if [ "$(realpath "$LK_LEAD_DIR" 2>/dev/null)" = "$(realpath "$HOME")" ]; then soft "the lead's folder is your home folder, so it can't have its own instructions" "set LK_LEAD_DIR=\"\$HOME/lead\" in the config, then: lead update"
+elif grep -qs 'BEGIN pierce-skill-kit lead' "$LK_LEAD_DIR/CLAUDE.md"; then ok "lead instructions in $LK_LEAD_DIR/CLAUDE.md"
+else soft "no lead instructions in $LK_LEAD_DIR/CLAUDE.md" "lead update"; fi
 grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" && ok "tmux settings" || soft "tmux settings not loaded" "re-run ./install.sh (tmux step)"
 crontab -l 2>/dev/null | grep -q 'tab-watch' && ok "watchdog in cron" || soft "watchdog not scheduled" "re-run ./install.sh (watchdog step), or run tab-watch every 15 min"
 if [ -f "$CD/settings.json" ] && have jq; then

@@ -101,7 +101,9 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `brief-send <tab> <brief.md>` | point a tab at a brief file in one line |
 | `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed`. Each one gets a cheap second look (`report-check`): a `done` without proof, or a claimed deploy/send/merge, is tagged so the lead checks it first |
 | `tab-sweep [--dry-run]` | close finished tabs: last report `done`, work committed, nothing still serving, quiet for a while. Flags the ones that aren't; logs how to reopen each |
-| `order add\|done\|wait\|list` | ledger of your asks, closed only with proof |
+| `order add\|done\|wait\|list` | ledger of your asks, closed only with proof; shows each one's age, `OLD` past 24 h |
+| `lead-round` | one screen for the lead's monitor round: machine, orders, tabs (stuck on a prompt? unsaved?), jobs, heartbeats, tunnels, what `tab-sweep` would close. Red lines start with `!` |
+| `lead-recall <words>` | search decisions, briefs, reports, orders and memory before asking the human again |
 | `tab-watch` | watchdog: flags tabs idle with no report (not ones waiting on you) |
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
 | `job run <name> -- <cmd>` | run a headless job under a watchdog: relaunched after a crash or a usage-limit reset, every step reported (`job list`, `job stop`) |

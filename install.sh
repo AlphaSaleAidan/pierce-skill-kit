@@ -26,7 +26,7 @@ command -v claude >/dev/null || echo "note: 'claude' not on PATH yet - install C
 
 mkdir -p "$BIN" "$CFG" "$CLAUDE_DIR/skills"
 for f in bin/*; do if [ -f "$f" ]; then put "$f" "$BIN/$(basename "$f")"; fi; done
-chmod +x "$BIN"/claude-acct "$BIN"/lk-doctor "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily "$BIN"/skill-route-sync "$BIN"/skill-add "$BIN"/ssh-setup "$BIN"/report-check "$BIN"/tab-sweep "$BIN"/job
+chmod +x "$BIN"/claude-acct "$BIN"/lk-doctor "$BIN"/lead "$BIN"/tab-view "$BIN"/claude-tab "$BIN"/brief-send "$BIN"/report "$BIN"/order "$BIN"/heavy "$BIN"/tab-watch "$BIN"/lead-daily "$BIN"/skill-route-sync "$BIN"/skill-add "$BIN"/ssh-setup "$BIN"/report-check "$BIN"/tab-sweep "$BIN"/job "$BIN"/lead-recall "$BIN"/lead-round
 echo "tools  -> $BIN"
 skill() { # skill <name>: copy a whole skill folder; an existing different copy is kept as <name>.bak
   d="$CLAUDE_DIR/skills/$1"
@@ -43,10 +43,20 @@ route_sync() { # keep ~/.claude/skill-router.md in step with the installed skill
   [ -f "$CLAUDE_DIR/skill-router.md" ] || cp templates/skill-router.md "$CLAUDE_DIR/skill-router.md"
   if command -v node >/dev/null; then "$BIN/skill-route-sync" --quiet | sed 's/^/router -> /'; else echo "router -> skipped: skill-route-sync needs Node"; fi; }
 
+lead_md() { # the lead's own instructions go in its folder, never in $HOME (every session under it would read them)
+  . "$CFG/config" 2>/dev/null; d=${LK_LEAD_DIR:-$HOME/lead}
+  if [ "$(realpath "$d" 2>/dev/null)" = "$(realpath "$HOME")" ]; then
+    echo "lead   -> skipped: the lead's folder is your home folder. Set LK_LEAD_DIR=\"\$HOME/lead\" in $CFG/config, then re-run"; return; fi
+  mkdir -p "$d"
+  if grep -qs 'BEGIN pierce-skill-kit lead' "$d/CLAUDE.md"; then  # refresh our block, keep the rest
+    awk '/BEGIN pierce-skill-kit lead/{skip=1} !skip{print} /END pierce-skill-kit lead/{skip=0; while ((getline l < "templates/lead-CLAUDE.md") > 0) print l}' "$d/CLAUDE.md" > "$d/CLAUDE.md.tmp" && mv "$d/CLAUDE.md.tmp" "$d/CLAUDE.md"
+  else { [ -s "$d/CLAUDE.md" ] && echo; cat templates/lead-CLAUDE.md; } >> "$d/CLAUDE.md"; fi
+  echo "lead   -> $d/CLAUDE.md (the lead's operating instructions)"; }
 if [ "$mode" = update ]; then   # refresh only what is already installed
   for d in "$CLAUDE_DIR"/skills/*/; do n=$(basename "$d"); [ -d "skills/$n" ] && skill "$n"; done
   for d in "$CFG"/mods/*/; do n=$(basename "$d"); [ -d "mods/$n" ] && { rm -rf "$d"; cp -r "mods/$n" "$CFG/mods/$n"; }; done
   for f in "$CFG"/hooks/*.sh; do [ -f "hooks/$(basename "$f")" ] && put "hooks/$(basename "$f")" "$f"; done
+  lead_md
   echo "update -> refreshed installed skills, mods and hooks"
   route_sync
   exit 0
@@ -65,6 +75,7 @@ if ask "Use the Pierce Skill Kit tmux settings (mouse scroll/copy, LEADER marker
   grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" || echo "source-file $CFG/pierce-skill-kit.tmux.conf" >> "$HOME/.tmux.conf"
   echo "tmux   -> ~/.tmux.conf sources it"
 fi
+lead_md
 if ask "Append the rules sheet to $CLAUDE_DIR/CLAUDE.md (every session reads it)?"; then
   if grep -qs 'BEGIN pierce-skill-kit rules' "$CLAUDE_DIR/CLAUDE.md"; then echo "rules  -> already there"
   else { echo; cat templates/CLAUDE.md; } >> "$CLAUDE_DIR/CLAUDE.md"; echo "rules  -> appended to $CLAUDE_DIR/CLAUDE.md"; fi

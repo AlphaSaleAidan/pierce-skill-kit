@@ -13,6 +13,8 @@ case $1 in
   done|wait) [ -n "$3" ] || { echo "order $1: say what (proof for done, what it waits on for wait)" >&2; exit 2; }
     st=$1; [ "$st" = wait ] && st=waiting
     awk -F'\t' -v OFS='\t' -v id="$2" -v st="$st" -v n="$now $3" '$1==id{$5=st;$7=n}1' "$f" > "$f.tmp" && mv "$f.tmp" "$f"; echo "order #$2 -> $st";;
-  list) awk -F'\t' -v all="$2" 'NR>1 && (all=="all" || $5!="done") {printf "#%-3s %-8s %-17s %-12s %s%s\n",$1,$5,$2,$3,$6,($7?"  ["$7"]":"")}' "$f";;
+  list) awk -F'\t' -v all="$2" -v now="$(date -u +%s)" 'NR>1 && (all=="all" || $5!="done") {
+      cmd="date -u -d " $2 " +%s"; cmd | getline t; close(cmd); h=int((now-t)/3600)
+      printf "#%-3s %-8s %-17s %3dh%s %-12s %s%s\n",$1,$5,$2,h,(h>=24 && $5!="done"?" OLD":"    "),$3,$6,($7?"  ["$7"]":"")}' "$f";;
   *) sed -n 2,6p "$0";;
 esac

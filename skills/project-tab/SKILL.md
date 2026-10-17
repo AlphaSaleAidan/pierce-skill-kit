@@ -42,11 +42,18 @@ Goal: **high-quality work at a good pace.** Neither alone counts.
 - **Every** finished task, milestone, blocker, failure, or question → `report` the moment it happens:
   `report <project> <done|progress|blocked|needs-human|failed> "<result + proof in one line>" [paths/links]`
   It's the only path to the lead. Don't report to other sessions by name.
+- A `done` needs proof in the line or the paths: a commit, test output, a link you opened, a screenshot path.
+  Every report gets a cheap check, and a `done` without proof is flagged to the lead as unverified.
+- Headless or long jobs run under `job run <name> -- <cmd>`: a crash or usage limit relaunches and reports.
 - Long job (>45 min) or waiting on a slot → `report <p> progress "<what, ETA>"`.
 - Blocked on a decision → `report <p> needs-human "<question + options + your recommendation>"`, then keep
   working on other lanes. A safety rule blocks a live step → report the exact one command for the human.
 - A deadline is the go: plan backwards from it; say immediately if it's at risk, and why.
-- Don't idle: when a lane waits, move to the next item in your brief.
+- Don't idle: when a lane waits, move to the next item in your brief. Blocked → try another path the same
+  turn before reporting `blocked`.
+- Ambition: do the ask fully, then build the bolder version if it fits the same limits (no extra spend, sends,
+  deploys or legal risk). Have a big idea from where you stand (a product, a sale, an automation)? End the
+  report line with `BOLD NEXT: <idea + first step>`; the lead pitches the best ones daily.
 
 ## 6. Safety
 - Branch → preview → human's OK → main/prod. Reversible changes (flags, archive) over destructive ones.

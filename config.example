@@ -8,8 +8,9 @@ LK_HOME="$HOME/.pierce-skill-kit"
 LK_HUB=hub
 LK_LEAD_WINDOW=Lead
 
-# Folder the lead session starts in (pick a neutral "control" folder, not a project repo).
-LK_LEAD_DIR="$HOME"
+# Folder the lead session starts in: its own folder (install.sh puts the lead's CLAUDE.md here), never a project
+# repo and never $HOME itself (every Claude started under $HOME would read the lead's instructions).
+LK_LEAD_DIR="$HOME/lead"
 
 # Command that starts Claude Code. Swap in your own wrapper if you have one.
 LK_CLAUDE=claude
@@ -38,6 +39,10 @@ LK_CHECK_KEY_FILE="$HOME/.secrets/openrouter.env"
 LK_JOB_TRIES=3
 LK_JOB_RETRY_MIN=5
 LK_JOB_LIMIT_WAIT_MIN=60
+
+# lead-round: files that must keep getting fresh output ("path:max_minutes", space-separated), e.g.
+# LK_HEARTBEATS="$HOME/backups/last-run.log:1500 $HOME/site/uptime.txt:30"
+LK_HEARTBEATS=''
 
 # heavy: box-wide queue for CPU-heavy commands.
 LK_HEAVY_SLOTS=2

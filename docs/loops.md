@@ -21,6 +21,8 @@ Waiting on a build, a render, a deploy, a tab.
 - **Never poll on a short timer.** *Why: each wake-up re-reads the context; short polls cost more tokens than the work.*
 - **Wait on one long watch or an event:** an until-loop that exits when the condition is true, or a background task that notifies on exit. *Why: you wake up once, when there's something to see.*
 - **No idle status pings.** "Still waiting" is not a report. *Why: it trains the reader to skip your messages.*
+- **The lead's monitor round is the one standing loop:** `/loop lead round`, self-paced, 20–30 min apart. Each
+  round starts with `lead-round` (one screen: machine, orders, tabs, jobs, heartbeats, tunnels, sweep).
 - **Fallback heartbeat: 20–30 min.** Only as a safety net in case the event never comes. *Why: long enough to be cheap, short enough to catch a hang.*
 - **Detached jobs don't notify, so track them** (PID + log path in your notes; check the log). *Why: a detached process exits silently.*
 - **The watchdog flags idle tabs, but not ones waiting on the human.** `tab-watch` skips a tab whose last report was `needs-human`. *Why: nagging about a tab that's correctly waiting buries the tabs that are actually stuck.*
