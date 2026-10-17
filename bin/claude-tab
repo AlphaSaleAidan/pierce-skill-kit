@@ -1,16 +1,18 @@
 #!/bin/sh
 # claude-tab - open a PROJECT TAB: a new window in the hub session running its own Claude Code.
-#   claude-tab <dir> [-n name] [-r session-id] [-p "first task"] [-m model] [-a account] [-f]
+#   claude-tab <dir> [-n name] [-r session-id | -c] [-p "first task" | -b brief.md] [-m model] [-a account] [-f]
 #   -n tab label (default: folder name; use the PROJECT name, not the task)   -r resume that session
+#   -b start on that brief (same line brief-send types)   -c pick up the folder's last conversation (use it to reopen a tab that closed, so its context comes back)
 #   -p start with this task   -m model   -a run on that Claude account (see claude-acct)   -f allow a 2nd tab in a folder another tab already works in
 # Refuses (exit 3) a duplicate tab name, an already-running resume id, or a folder that already has a tab:
 # brief the existing tab instead.
 . "$(dirname "$0")/lk-config"
 dir=$1; shift 2>/dev/null
 [ -d "$dir" ] || { echo "claude-tab: no such folder: $dir" >&2; exit 1; }
-name=$(basename "$dir"); resume=''; prompt=''; model=''; force=''; acct=''
-while getopts n:r:p:m:a:f o; do
-  case $o in n) name=$OPTARG;; r) resume=$OPTARG;; p) prompt=$OPTARG;; m) model=$OPTARG;; a) acct=$OPTARG;; f) force=1;; *) exit 1;; esac
+name=$(basename "$dir"); resume=''; cont=''; prompt=''; model=''; force=''; acct=''
+while getopts n:r:p:b:m:a:fc o; do
+  case $o in n) name=$OPTARG;; r) resume=$OPTARG;; p) prompt=$OPTARG;; b) [ -f "$OPTARG" ] || { echo "claude-tab: no such brief: $OPTARG" >&2; exit 1; }
+    prompt="Brief from the lead: read $(realpath "$OPTARG") and follow it (skill: project-tab). Report every finished task / blocker / question with: report <project> <done|progress|blocked|needs-human|failed> \"<one line + proof>\"";; m) model=$OPTARG;; a) acct=$OPTARG;; f) force=1;; c) cont=1;; *) exit 1;; esac
 done
 tmux has-session -t "$LK_HUB" 2>/dev/null || { echo "claude-tab: no '$LK_HUB' session - run: lead -d" >&2; exit 1; }
 [ -z "$acct" ] || [ "$acct" = main ] || [ -d "$HOME/.claude-$acct" ] || { echo "claude-tab: no account '$acct' (claude-acct add $acct)" >&2; exit 1; }
@@ -26,6 +28,7 @@ hit=$(echo "$existing" | awk -F'|' -v d="$real" '$3==d' | head -1)
 if [ -n "$acct" ]; then set -- "$(dirname "$0")/claude-acct" run "$acct"; else set -- $LK_CLAUDE; fi
 [ -n "$model" ] && set -- "$@" --model "$model"
 [ -n "$resume" ] && set -- "$@" --resume "$resume"
+[ -n "$cont" ] && [ -z "$resume" ] && set -- "$@" --continue
 [ -n "$prompt" ] && set -- "$@" "$prompt"
 w=$(tmux new-window -d -P -F '#{window_id}' -t "$LK_HUB:" -n "$name" -c "$real" "$@") || exit 1
 tmux set-window-option -t "$w" automatic-rename off >/dev/null

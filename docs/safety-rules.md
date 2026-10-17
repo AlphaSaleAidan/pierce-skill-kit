@@ -26,4 +26,5 @@ Subagents whose prompt starts with `READ-ONLY` (and the read-only `Explore` agen
 { "hooks": { "PreToolUse": [ { "matcher": "Agent|Task",
   "hooks": [ { "type": "command", "command": "~/.config/pierce-skill-kit/hooks/lead-no-worker-agents.sh" } ] } ] } }
 ```
-It only acts when the session's folder is `LK_LEAD_DIR`, so keep the lead in its own folder. Needs `jq`.
+It only acts in the lead's own window (`hub:Lead`); project tabs and any other Claude, even one started in the
+lead's folder, can use subagents freely. Needs `jq`.

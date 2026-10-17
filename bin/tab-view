@@ -1,13 +1,20 @@
 #!/bin/sh
-# tab-view <session:window> - look at one tab in its own terminal, independently of other terminals
-# (a linked tmux view: switching tabs here doesn't move anyone else's; the view dies when the terminal closes).
-# One view per tab: opening a tab again replaces its older view instead of stacking duplicates.
+# tab-view [--replace] <session:window> - look at one tab in its own terminal, independently of other terminals
+# (a linked tmux view: switching tabs here doesn't move anyone else's; the view closes with the terminal, the tab
+# keeps running). It never closes another terminal. --replace (what mac-tab uses) closes an older view that was
+# opened for this same tab, so reopening a Mac tab replaces its old window instead of stacking a duplicate.
 . "$(dirname "$0")/lk-config"
-target=${1:-$LK_LEAD}
-sess=${target%%:*}; win=${target#*:}
-for v in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^view-'); do
-  [ "$(tmux display -p -t "$v" '#{session_group}')" = "$sess" ] || continue
-  [ "$(tmux display -p -t "$v" '#{window_name}')" = "$win" ] || [ "$(tmux display -p -t "$v" '#{window_index}')" = "$win" ] || continue
-  tmux kill-session -t "$v"
-done
-exec tmux new-session -t "$sess" -s "view-$$" \; set-option destroy-unattached on \; select-window -t ":$win"
+replace=''; [ "$1" = --replace ] && { replace=1; shift; }
+target=${1:-$LK_LEAD}; sess=${target%%:*}
+# The window's id, not its name or number: numbers shift when a tab closes, so they can point at a different tab.
+wid=$(tmux display -p -t "$target" '#{window_id}' 2>/dev/null) || { echo "tab-view: no tab $target" >&2; exit 1; }
+# A tmux that was already running when the kit was installed never read its settings (copy mode stays tmux's
+# default yellow). Load them now, if you opted in to them (~/.tmux.conf sources the file).
+conf=$HOME/.config/pierce-skill-kit/pierce-skill-kit.tmux.conf
+[ -z "$(tmux show -gqv @pierce-skill-kit)" ] && grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" && tmux source-file "$conf"
+if [ -n "$replace" ]; then
+  for v in $(tmux list-sessions -F '#{session_name}' 2>/dev/null | grep '^view-'); do
+    [ "$(tmux show -t "$v" -qv @lk_for)" = "$wid" ] && tmux kill-session -t "$v"
+  done
+fi
+exec tmux new-session -t "$sess" -s "view-$$" \; set-option destroy-unattached on \; set-option @lk_for "$wid" \; select-window -t ":$wid"

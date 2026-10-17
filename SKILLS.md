@@ -45,6 +45,7 @@ _Lead model: Opus directs, Sonnet runs QC/sweeps._
 _Lead model: Opus._
 | Skill | What it does | When to use | Needs |
 |---|---|---|---|
+| `find-component` | Finds a ready-made component, animation, icon, 3D model, font, photo or sound that matches a description, from a vetted list of ~45 sources (`sources.md`), checks the licence, then re-skins it | Before building any UI element or asset from scratch | none (a browser or web search for sites that block bots) |
 | `website-build` | Recipe for a premium marketing/ecommerce site that doesn't read as AI-generated: direction pass, real assets, React/Vite/Tailwind/GSAP/Lenis build, visual verify | New site, landing page, or "remake this website" | Node, Playwright; optional image/video generation API |
 
 ## Sales & decks

@@ -1,12 +1,12 @@
 #!/bin/sh
-# Optional PreToolUse hook (matcher: Agent|Task): keeps the LEAD a manager, not a worker. In the lead's folder
-# ($LK_LEAD_DIR), Agent calls are blocked unless the prompt starts with READ-ONLY (cross-project research).
-# Project work goes to that project's tab instead. Project tabs (other folders) are untouched.
+# Optional PreToolUse hook (matcher: Agent|Task): keeps the LEAD a manager, not a worker. In the lead's window
+# ($LK_LEAD), Agent calls are blocked unless the prompt starts with READ-ONLY (cross-project research).
+# Project work goes to that project's tab instead. Project tabs, and any Claude outside the lead window
+# (even one started in the lead's folder), are untouched.
 # Needs jq.
 . "$HOME/.local/bin/lk-config"
 in=$(cat)
-cwd=$(printf '%s' "$in" | jq -r '.cwd // ""')
-[ "$(realpath "$cwd" 2>/dev/null)" = "$(realpath "$LK_LEAD_DIR")" ] || exit 0
+[ -n "$TMUX_PANE" ] && [ "$(tmux display -p -t "$TMUX_PANE" '#{session_name}:#{window_name}' 2>/dev/null)" = "$LK_LEAD" ] || exit 0
 t=$(printf '%s' "$in" | jq -r '.tool_input.subagent_type // ""')
 case "$t" in Explore|claude-code-guide) exit 0;; esac
 printf '%s' "$in" | jq -r '.tool_input.prompt // ""' | head -c 200 | grep -q 'READ-ONLY' && exit 0

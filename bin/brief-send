@@ -7,5 +7,8 @@ case $target in *:*) ;; *) target="$LK_HUB:$target";; esac
 [ -f "$file" ] || { echo "brief-send: no such brief: $file" >&2; exit 1; }
 tmux list-windows -t "${target%%:*}" -F '#W #I' 2>/dev/null | grep -qw -- "${target#*:}" || { echo "brief-send: no tab $target" >&2; exit 1; }
 file=$(realpath "$file")
+# A tab opened seconds ago may still be starting Claude, and keys typed before its input box is up are lost.
+age=$(ps -o etimes= -p "$(tmux display -p -t "$target" '#{pane_pid}')" 2>/dev/null | tr -d ' ')
+[ -n "$age" ] && [ "$age" -lt 15 ] && sleep $((15 - age))
 tmux send-keys -t "$target" -l "Brief from the lead: read $file and follow it (skill: project-tab). Report every finished task / blocker / question with: report <project> <done|progress|blocked|needs-human|failed> \"<one line + proof>\"" \
   && sleep 0.5 && tmux send-keys -t "$target" Enter && echo "sent $file -> $target"

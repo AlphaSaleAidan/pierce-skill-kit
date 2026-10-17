@@ -1,0 +1,68 @@
+#!/bin/sh
+# ssh-setup - run once ON YOUR OWN COMPUTER (Mac or Linux). Afterwards `ssh box` logs in to your server with no
+# password, `lead` opens the lead there, and `tab <name>` opens one project tab.
+#   sh ssh-setup me@my-server [-p port] [-n name] [--no-shortcuts]
+# Without downloading the kit first:
+#   curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/bin/ssh-setup | sh -s -- me@my-server
+# Safe to run again: it keeps your key, adds it to the server once, and rewrites only its own lines.
+set -e
+usage() { echo "usage: ssh-setup me@my-server [-p port] [-n name] [--no-shortcuts]" >&2; exit 2; }
+dest=''; port=22; name=box; shortcuts=1
+while [ $# -gt 0 ]; do
+  case $1 in -p) port=$2; shift;; -n) name=$2; shift;; --no-shortcuts) shortcuts='';; -h|--help) usage;; -*) usage;; *) dest=$1;; esac
+  shift
+done
+case $dest in ?*@?*) ;; *) usage;; esac
+echo "$name" | grep -qE '^[A-Za-z0-9._-]+$' || { echo "ssh-setup: -n takes letters, digits, dot, dash" >&2; exit 2; }
+user=${dest%@*}; host=${dest#*@}
+D=$HOME/.ssh; key=$D/id_ed25519; cfg=$D/config
+mkdir -p "$D"; chmod 700 "$D"; touch "$cfg"; chmod 600 "$cfg"
+
+# 1. a key on this computer (kept if you already have one)
+if [ -f "$key" ]; then echo "1/4 key: using your existing $key"
+else ssh-keygen -q -t ed25519 -N '' -C "$(id -un)@$(hostname) pierce-skill-kit" -f "$key"; echo "1/4 key: made $key"; fi
+
+# 2. the short name: a "Host <name>" block in ~/.ssh/config, between our own markers
+if grep -qiE "^[[:space:]]*Host[[:space:]]+(.*[[:space:]])?$name([[:space:]]|\$)" "$cfg" && ! grep -q "^# BEGIN pierce-skill-kit $name\$" "$cfg"; then
+  echo "ssh-setup: ~/.ssh/config already has a 'Host $name' you wrote; pick another name with -n" >&2; exit 1; fi
+tmp=$cfg.psk-tmp
+awk -v b="# BEGIN pierce-skill-kit $name" -v e="# END pierce-skill-kit $name" '$0==b{skip=1} !skip{print} $0==e{skip=0}' "$cfg" > "$tmp"
+cat >> "$tmp" <<CFG
+# BEGIN pierce-skill-kit $name
+Host $name
+  HostName $host
+  User $user
+  Port $port
+  IdentityFile $key
+  IdentitiesOnly yes
+  # keeps an idle connection open, so a quiet session isn't dropped
+  ServerAliveInterval 30
+  ServerAliveCountMax 6
+# END pierce-skill-kit $name
+CFG
+mv "$tmp" "$cfg"; chmod 600 "$cfg"
+echo "2/4 name: 'ssh $name' now means $dest (port $port)"
+
+# 3. put the key on the server once (asks for the server password this one time)
+if ssh -o BatchMode=yes -o ConnectTimeout=10 "$name" true 2>/dev/null; then echo "3/4 server: already trusts this key"
+else
+  echo "3/4 server: type your server password (the last time you'll need it)"
+  ssh -o StrictHostKeyChecking=accept-new -o PreferredAuthentications=password,keyboard-interactive "$name" \
+    'umask 077; mkdir -p ~/.ssh; touch ~/.ssh/authorized_keys; k=$(cat); grep -qxF "$k" ~/.ssh/authorized_keys || echo "$k" >> ~/.ssh/authorized_keys; chmod 700 ~/.ssh; chmod 600 ~/.ssh/authorized_keys' < "$key.pub"
+fi
+ssh -o BatchMode=yes -o ConnectTimeout=10 "$name" true 2>/dev/null \
+  || { echo "ssh-setup: the server still asks for a password. Check: ssh -v $name" >&2; exit 1; }
+echo "4/4 check: 'ssh $name' logs in with no password"
+
+# shortcuts: lead + tab in your shell's startup file
+if [ -n "$shortcuts" ]; then
+  case ${SHELL##*/} in zsh) rc=$HOME/.zshrc;; bash) rc=$HOME/.bashrc; [ "$(uname)" = Darwin ] && rc=$HOME/.bash_profile;; *) rc=$HOME/.profile;; esac
+  touch "$rc"; grep -v '# pierce-skill-kit ssh-setup$' "$rc" > "$rc.psk-tmp" || true
+  cat >> "$rc.psk-tmp" <<RC
+lead() { ssh -t $name '~/.local/bin/lead'; }   # pierce-skill-kit ssh-setup
+tab() { ssh -t $name "~/.local/bin/tab-view hub:\$1"; }   # pierce-skill-kit ssh-setup
+RC
+  cat "$rc.psk-tmp" > "$rc"; rm -f "$rc.psk-tmp"
+  echo "shortcuts: 'lead' and 'tab <name>' added to $rc (open a new terminal, or: . $rc)"
+fi
+echo "Done."

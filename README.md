@@ -35,6 +35,11 @@ that keeps token spend sane, and a one-page [rules sheet](RULES.md) that keeps i
    curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/get.sh | bash
    ```
 3. **Sign in and start:** `claude` (once), then `lead`. Check anything with `lead doctor`.
+4. **On your own computer** (Mac or Linux), one line sets up password-free login plus `lead` and `tab <name>`
+   shortcuts that open them from there (Windows: [docs/windows.md](docs/windows.md)):
+   ```sh
+   curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/bin/ssh-setup | sh -s -- me@my-server
+   ```
 
 > **On Windows:** Windows Terminal + ssh, a `lead` shortcut and a tab per project: [docs/windows.md](docs/windows.md).
 > **On a Mac:** any terminal + ssh works; optional Terminal.app tab helpers: [docs/macos.md](docs/macos.md).

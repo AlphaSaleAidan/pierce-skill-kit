@@ -3,6 +3,41 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.4.1 (2026-10-17)
+**Run this** if you already installed: `lead update`, then close every terminal showing the lead and run `lead`
+again. On your Mac or Linux computer (not the server), once:
+`curl -fsSL https://raw.githubusercontent.com/AlphaSaleAidan/pierce-skill-kit/main/bin/ssh-setup | sh -s -- me@my-server`
+(Windows: [docs/windows.md](docs/windows.md)).
+
+### Fixed
+- **Terminals closing by themselves.** Opening a tab (or the lead) in a second terminal closed any other terminal
+  that happened to be showing that tab, and after a tab closed and the others renumbered, `hub:3` could close the
+  view of a different tab. Now `tab-view` never closes another terminal. Only `mac-tab` replaces its own older
+  window for the same tab (`tab-view --replace`). Your tabs kept running the whole time; only the view was closed.
+- **Yellow copy highlight.** A tmux that was already running when you installed the kit never read its settings,
+  so scrolling and copying used tmux's yellow default. `lead` / `tab-view` now load the settings into a running
+  tmux, and every remaining yellow (messages, search matches, menus) is set to the kit's quiet colours.
+- **Esc stopped Claude.** The docs said Esc leaves scroll mode, but once scroll mode had already ended Esc went to
+  Claude and interrupted it (twice opens rewind). Docs now say: scroll back down or just type.
+- **Conversations split between accounts.** An account added before `~/.claude/projects` existed kept its own
+  conversations, so a tab on another account couldn't pick them up. Accounts now always share them;
+  `lead doctor` shows how to merge an account that already split.
+- The lead's "no worker subagents" hook only acts in the lead's own window, not in any Claude you start in the
+  lead's folder.
+
+### Added
+- **`ssh-setup`** (Mac/Linux) and **`ssh-setup.ps1`** (Windows): one command on your own computer makes a key,
+  puts it on the server (your password is asked once), adds `ssh box`, and adds `lead` and `tab <name>`
+  shortcuts. Keeps idle connections open so quiet sessions aren't dropped. Safe to re-run.
+- **`claude-tab -c`** reopens a tab on the folder's last conversation, so a tab that closed gets its context back.
+  **`claude-tab -b brief.md`** opens a tab straight onto a brief (one step instead of two).
+- `brief-send` waits for a tab that's still starting, so the brief isn't typed before Claude is ready.
+- **`find-component` skill:** finds a ready-made component, animation, icon, 3D model, font, photo or sound that
+  matches a description, from ~45 sources with their licences, then re-skins it for the project.
+- `lead doctor` warns when the running tmux lacks the kit settings, when an account keeps its own conversations,
+  and when the machine kills your tmux at logout.
+- Mac copy guide: iTerm2's one clipboard setting, Terminal.app's ⌘R, tmux running on the Mac copies via pbcopy.
+
 ## v0.4.0 (2026-10-16)
 ### Added
 - **4 skills** (22 in all): `claude-accounts` (which of your separate, legitimately owned accounts a tab or job runs

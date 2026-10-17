@@ -36,6 +36,11 @@ if [ -f "$CD/settings.json" ] && have jq; then
   [ "$n" -gt 0 ] && ok "$n kit mod(s) enabled" || soft "no kit mods enabled" "mods/install.sh agent-board (see mods/README.md)"
 fi
 tmux has-session -t "$LK_HUB" 2>/dev/null && ok "lead session '$LK_HUB' running" || soft "lead not running" "run: lead"
+if grep -qs 'pierce-skill-kit.tmux.conf' "$HOME/.tmux.conf" && tmux info >/dev/null 2>&1 && [ -z "$(tmux show -gqv @pierce-skill-kit)" ]; then
+  soft "the running tmux started without the kit settings (yellow copy highlight)" "tmux source-file ~/.tmux.conf"; fi
+for d in "$HOME"/.claude-*; do [ -d "$d/projects" ] && [ ! -L "$d/projects" ] && soft "account $(basename "$d" | sed 's/^\.claude-//') keeps its own conversations, so tabs on other accounts can't pick them up" "with that account's Claude closed: cp -rn $d/projects/. ~/.claude/projects/ && mv $d/projects $d/projects.old"; done
+if [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = no ] && grep -qs '^KillUserProcesses=yes' /etc/systemd/logind.conf /etc/systemd/logind.conf.d/*.conf; then
+  soft "this machine kills your tmux (and every tab) when you log out" "sudo loginctl enable-linger $(id -un)"; fi
 
 echo "Machine"
 disk=$(df -Pk "$HOME" | awk 'NR==2{print int($4/1048576)}'); [ "$disk" -ge 5 ] && ok "${disk} GB disk free" || soft "only ${disk} GB disk free" "free up space (builds and renders need room)"

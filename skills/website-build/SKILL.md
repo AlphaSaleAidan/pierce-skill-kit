@@ -79,7 +79,7 @@ Write a DESIGN.md-style block, then state it in ≤8 lines:
 [Magic UI](https://magicui.design/docs/components) · [KokonutUI](https://kokonutui.com) ·
 [21st.dev](https://21st.dev/community/components) · [GSAP docs](https://gsap.com/docs/v3/) ·
 [Lenis](https://github.com/darkroomengineering/lenis). Check each component's license; strip its demo
-palette and re-theme to the brand before it ships.
+palette and re-theme to the brand before it ships. To find one that matches a description, use `find-component` (~45 sources by type).
 
 ## 4. Verify (never call it done without this)
 Playwright screenshots at scroll positions (1440×900 and 390×844 for mobile), downscaled ≤1400 px before

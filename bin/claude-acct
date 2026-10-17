@@ -22,6 +22,7 @@ usage() { # usage <name>: "5h 23% · week 71% (2h ago)" from the statusline's sa
   age=$(( ($(date +%s) - $(stat -c %Y "$f")) / 60 ))
   jq -r --arg age "$age" '"5h \(.five_hour.used_percentage // "?" | if type=="number" then round else . end)% · week \(.seven_day.used_percentage // "?" | if type=="number" then round else . end)% (\($age)m ago)"' "$f"; }
 share() { # share <dir>: symlink everything shareable from ~/.claude into an account's dir
+  mkdir -p "$MAIN/projects"   # conversations: shared, or a tab can't pick up one started on another account
   for e in "$MAIN"/* "$MAIN"/.[!.]*; do
     [ -e "$e" ] || continue; item=$(basename "$e")
     echo "$item" | grep -qE "$PRIVATE" && continue

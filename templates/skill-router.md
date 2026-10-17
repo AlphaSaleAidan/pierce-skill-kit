@@ -38,6 +38,7 @@ move a row up here (by hand) once you use it often.
 | QC any video before a client sees it | `video-qc-reviewer` |
 | Edit real footage by conversation | `video-use` (third-party) |
 | New marketing site or "remake this website" | `website-build` (+ `design-motion-principles` for motion) |
+| Need a UI element, icon, animation, 3D model, font, photo or sound | `find-component` (its `sources.md` lists where to look) |
 | Pitch / sales deck | `deck` |
 | Same-day prep for a booked sales meeting (site + deck + demo phone agent) | `sales-appointment-prep` |
 | Which of your separate Claude accounts a tab or job runs on | `claude-accounts` |
