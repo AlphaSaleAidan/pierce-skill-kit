@@ -5,6 +5,7 @@
 . "$(dirname "$0")/lk-config"
 S=$LK_HOME/tab-watch.state; R=$LK_HOME/reports.tsv
 touch "$S"; now=$(date +%s); new=""
+"$(dirname "$0")/job" check >/dev/null 2>&1   # jobs whose watchdog died get reported too
 tmux has-session -t "$LK_HUB" 2>/dev/null || exit 0
 for w in $(tmux list-windows -t "$LK_HUB" -F '#{window_index}'); do
   name=$(tmux display -p -t "$LK_HUB:$w" '#W'); [ "$name" = "$LK_LEAD_WINDOW" ] && continue

@@ -23,6 +23,22 @@ LK_WATCH_IGNORE='auto mode|bypass permissions|accept edits'
 # Model lead-daily --summary uses (a mid model is plenty for a digest).
 LK_SUMMARY_MODEL=sonnet
 
+# tab-sweep: close a tab whose last report is done (and is saved, not serving anything) once quiet this long.
+LK_SWEEP_IDLE_MIN=30
+
+# report-check: a cheap second look at every report before the lead relays it.
+# auto = Jev via OpenRouter when the key file below holds OPENROUTER_API_KEY=... (about $0.00002 a report),
+# otherwise Haiku through Claude Code, otherwise free rules. Or force one: jev | haiku | rules | off
+LK_CHECK=auto
+LK_CHECK_MODEL=typesafe/jev-1.13
+LK_CHECK_KEY_FILE="$HOME/.secrets/openrouter.env"
+
+# job: headless jobs under a watchdog. Tries before giving up, minutes between tries, and how long to wait after
+# a usage limit when the message has no reset time.
+LK_JOB_TRIES=3
+LK_JOB_RETRY_MIN=5
+LK_JOB_LIMIT_WAIT_MIN=60
+
 # heavy: box-wide queue for CPU-heavy commands.
 LK_HEAVY_SLOTS=2
 LK_HEAVY_NICE=15

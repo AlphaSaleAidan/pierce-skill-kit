@@ -1,0 +1,41 @@
+#!/bin/sh
+# tab-sweep [--dry-run] - close the project tabs that are finished, safely. The lead runs it every round.
+# A tab is closed only when ALL hold: its last report is `done`; its folder has no uncommitted work (commits on a
+# branch count as saved); nothing it started is still serving a port; and it has been quiet for $LK_SWEEP_IDLE_MIN
+# minutes. Anything else is left open, and a tab that looks finished but fails a check is flagged with the reason.
+# Closing = the hub window, the views opened for it (and Mac windows via mac-close-dead), plus one line in
+# $LK_HOME/retired-tabs.md with the command that reopens it on its last conversation.
+. "$(dirname "$0")/lk-config"
+dry=''; [ "$1" = --dry-run ] && dry=1
+R=$LK_HOME/reports.tsv; RT=$LK_HOME/retired-tabs.md; CD=${CLAUDE_CONFIG_DIR:-$HOME/.claude}
+tmux has-session -t "$LK_HUB" 2>/dev/null || { echo "tab-sweep: no '$LK_HUB' session"; exit 0; }
+now=$(date +%s)
+descendants() { # descendants <pid>: that pid and every process below it
+  echo "$1"; for c in $(ps -o pid= --ppid "$1" 2>/dev/null); do descendants "$c"; done; }
+tmux list-windows -t "$LK_HUB" -F '#{window_id}|#{window_name}|#{pane_current_path}|#{window_activity}|#{pane_pid}' |
+while IFS='|' read -r wid name dir act pid; do
+  [ "$name" = "$LK_LEAD_WINDOW" ] && continue
+  last=$(awk -F'\t' -v t="$name" '$6==t{x=$3} END{print x}' "$R" 2>/dev/null)
+  [ "$last" = "done" ] || { echo "open   $name: last report is ${last:-none}"; continue; }
+  why=''
+  idle=$(( (now - act) / 60 ))
+  [ "$idle" -ge "$LK_SWEEP_IDLE_MIN" ] || why="busy ${idle} min ago"
+  if git -C "$dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    n=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l)
+    [ "$n" -eq 0 ] || why="${why:+$why; }$n uncommitted file(s) in $dir"
+  fi
+  if command -v ss >/dev/null; then
+    pids=$(descendants "$pid" | tr '\n' '|'); port=$(ss -ltnpH 2>/dev/null | grep -E "pid=(${pids%|}),"  | awk '{print $4}' | head -3 | tr '\n' ' ')
+    [ -z "$port" ] || why="${why:+$why; }still serving ${port% }"
+  fi
+  if [ -n "$why" ]; then echo "FLAG   $name: reported done but $why"; continue; fi
+  # the newest conversation in that folder is the one to resume
+  sid=$(ls -t "$CD/projects/$(printf '%s' "$dir" | sed 's/[^A-Za-z0-9]/-/g')"/*.jsonl 2>/dev/null | head -1 | xargs -r basename | sed 's/\.jsonl$//')
+  if [ -n "$dry" ]; then echo "would close $name ($dir, idle ${idle} min)"; continue; fi
+  for v in $(tmux list-sessions -F '#{session_name}' | grep '^view-'); do
+    [ "$(tmux show -t "$v" -qv @lk_for)" = "$wid" ] && tmux kill-session -t "$v"; done
+  tmux kill-window -t "$wid"
+  echo "- $(date -u +%Y-%m-%dT%H:%MZ) $name ($dir): reopen with \`claude-tab $dir -n $name${sid:+ -r $sid}\`" >> "$RT"
+  echo "closed $name (reopen: claude-tab $dir -n $name${sid:+ -r $sid})"
+  [ -n "$LK_MAC_SSH" ] && [ -x "$(dirname "$0")/mac-close-dead" ] && "$(dirname "$0")/mac-close-dead" >/dev/null 2>&1
+done

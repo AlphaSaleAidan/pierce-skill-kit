@@ -43,6 +43,8 @@ echo "ok: closing every terminal keeps the hub and its tabs"
 # 5. claude-tab -c reopens a tab on its last conversation
 tmux kill-window -t hub:b; claude-tab ~/b -n b -c >/dev/null; sleep 0.5
 tmux capture-pane -p -t hub:b | grep -q "ARGS: --continue" || fail "claude-tab -c did not pass --continue"
-echo "ok: claude-tab -c continues the last conversation"
+echo "read me" > /tmp/b.md; claude-tab ~/c -n c2 -f -b /tmp/b.md >/dev/null; sleep 0.5
+tmux capture-pane -p -t hub:c2 | tr -d "\n" | grep -q "ARGS: Brief from the lead: read /tmp/b.md and follow it" || fail "claude-tab -b did not start on the brief"
+echo "ok: claude-tab -c continues the last conversation; -b starts on a brief"
 echo "ALL VIEW TESTS PASSED ($(tmux -V))"
 '

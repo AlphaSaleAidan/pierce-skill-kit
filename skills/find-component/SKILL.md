@@ -16,6 +16,9 @@ The list of places to look is `sources.md` (next to this file). Search there bef
    search the web for `site:<domain> <your words>` instead.
 4. **Shortlist 3** that match. For each: link, licence, stack, and one line on why it fits. Take a screenshot
    of the demo when a human will choose.
+   Many candidates? Rank them cheaply with Jev (about $0.00002 each; needs an OpenRouter key, see the script):
+   `scripts/jev-rank.sh "<what you need>" candidates.tsv` (one `name<TAB>link<TAB>blurb` per line) prints a
+   0-3 fit score per item, best first. It only reads the blurbs: still open the top ones yourself.
 5. **Check the licence** before copying any code or file. MIT/CC0 are fine; "free for personal use", "CC BY-NC"
    or no licence at all are not fine for client or paid work. Credit the author when the licence asks.
 6. **Adapt, don't paste.** Copy the mechanics, then re-skin with the project's own colours, fonts and spacing

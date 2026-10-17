@@ -1,0 +1,47 @@
+#!/bin/sh
+# report-check <status> "<message>" "<proof>" [tab] - a cheap second look at a tab's report before the lead relays
+# it: does a "done" carry proof, and does it claim something a human must check (deploy, send, merge, payment,
+# deletion)? Prints one short tag for the lead's line and logs it to $LK_HOME/report-checks.tsv.
+# Grader (LK_CHECK): auto = Jev via OpenRouter if LK_CHECK_KEY_FILE holds OPENROUTER_API_KEY (~$0.00002 a report),
+# else Haiku via Claude Code, else free rules. jev | haiku | rules | off force one.
+. "$(dirname "$0")/lk-config"
+st=$1; msg=$2; proof=$3; tab=${4:-?}
+[ "$LK_CHECK" = off ] && exit 0
+log=$LK_HOME/report-checks.tsv
+[ -f "$log" ] || printf 'time_utc\ttab\tstatus\tevidence\trisky\ttrust_0_3\tgrader\n' > "$log"
+
+rules() { # free fallback: proof given / commit hash / link / test count = evidence; risky words = risky
+  ev=none; printf '%s %s' "$msg" "$proof" | grep -qE '[0-9a-f]{7,40}|https?://|[0-9]+/[0-9]+ (tests? )?pass|\.(png|jpg|txt|log|md|json)\b' && ev=weak
+  [ -n "$proof" ] && { ev=weak; for p in $proof; do [ -e "$p" ] && ev=strong; case $p in http*) ev=strong;; esac; done; }
+  risky=false; printf '%s' "$msg" | grep -qiE '\b(deploy(ed)?|prod(uction)?|sent|emailed|merged?|pushed|paid|charged?|refund(ed)?|deleted?|dropped)\b' && risky=true
+  trust=$( [ $ev = strong ] && echo 2 || { [ $ev = weak ] && echo 1 || echo 0; } ); grader=rules; }
+
+jev() {
+  key=$(sed -n 's/^OPENROUTER_API_KEY=//p' "$LK_CHECK_KEY_FILE" 2>/dev/null | tr -d "\"' "); [ -n "$key" ] || return 1
+  state=$(jq -n --arg s "$st" --arg m "$msg" --arg p "$proof" '{status:$s, message:$m, proof:$p}')
+  q='{"evidence":{"type":"choice","instructions":"How well does this report from an AI coding agent back up what it claims?","criteria":{"strong":"names concrete proof: commit hash, test output, a checked link, a file or screenshot path","weak":"vague proof, or proof that does not cover the main claim","none":"claims a result with no proof at all"}},"risky":{"type":"noul","instructions":"Does the report claim something a human must check before trusting it: a deploy, a send (email/message), a merge, a payment, or deleting data?","criteria":{"true":"yes, it claims one of those","false":"no"}},"trust":{"type":"score","instructions":"How far can a busy human trust this report as written?","criteria":["do not trust: likely overstated","doubtful","mostly trustworthy","fully trustworthy, proof covers it"]}}'
+  out=$(jq -n --arg m "$LK_CHECK_MODEL" --argjson s "$state" --argjson q "$q" '{model:$m, state:$s, questions:$q}' |
+    curl -sf -m "${LK_CHECK_TIMEOUT:-15}" https://openrouter.ai/api/alpha/decisions -H "Authorization: Bearer $key" \
+      -H 'Content-Type: application/json' -d @-) || return 1
+  ev=$(printf '%s' "$out" | jq -r '.answers.evidence.choice // empty'); [ -n "$ev" ] || return 1
+  risky=$(printf '%s' "$out" | jq -r 'if (.answers.risky.noul // 0) >= 0.5 then "true" else "false" end')
+  trust=$(printf '%s' "$out" | jq -r '.answers.trust.score // 0 | . * 10 | round / 10'); grader=jev; }
+
+haiku() {
+  # shellcheck disable=SC2086  # LK_CLAUDE may carry its own args
+  out=$(printf 'status: %s\nmessage: %s\nproof: %s\n' "$st" "$msg" "$proof" | timeout "${LK_CHECK_HAIKU_TIMEOUT:-60}" $LK_CLAUDE -p --model haiku \
+    'Grade this status report from an AI coding agent. Reply with ONLY one line of JSON: {"evidence":"strong|weak|none","risky":true|false,"trust":0-3}. strong = concrete proof (commit hash, test output, a checked link, a file or screenshot path) covering the main claim. risky = it claims a deploy, a send, a merge, a payment or deleting data. trust = how far a busy human can trust it as written.' 2>/dev/null) || return 1
+  line=$(printf '%s' "$out" | grep -o '{.*}' | head -1); ev=$(printf '%s' "$line" | jq -r '.evidence // empty' 2>/dev/null)
+  case $ev in strong|weak|none) ;; *) return 1;; esac
+  risky=$(printf '%s' "$line" | jq -r '.risky == true'); trust=$(printf '%s' "$line" | jq -r '.trust // 0'); grader=haiku; }
+
+case ${LK_CHECK:-auto} in
+  jev) jev || rules;; haiku) haiku || rules;; rules) rules;;
+  *) if [ -r "$LK_CHECK_KEY_FILE" ] && command -v jq >/dev/null && jev; then :
+     elif command -v jq >/dev/null && command -v "${LK_CLAUDE%% *}" >/dev/null && haiku; then :; else rules; fi;;
+esac
+printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$tab" "$st" "$ev" "$risky" "$trust" "$grader" >> "$log"
+tag=''
+[ "$st" = "done" ] && [ "$ev" != strong ] && tag="$( [ "$ev" = none ] && echo no || echo weak) proof for done: verify before telling the human"
+[ "$risky" = true ] && tag="${tag:+$tag; }claims a deploy/send/merge/payment/deletion: check it yourself"
+echo "{check $grader: ${tag:-ok}}"

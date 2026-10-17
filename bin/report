@@ -12,6 +12,8 @@ tab=$(tmux display -p -t "${TMUX_PANE:-}" '#{window_name}' 2>/dev/null || echo "
 oneline=$(printf '%s' "$msg" | tr '\t\n' '  ')
 printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$proj" "$st" "$oneline" "$extra" "$tab" >> "$log"
 text="[REPORT $st] $proj ($tab): $oneline${extra:+ | $extra}"
+# a cheap second look (report-check) rides along, so the lead sees a thin "done" before relaying it
+chk=$("$(dirname "$0")/report-check" "$st" "$oneline" "$extra" "$tab" 2>/dev/null) && [ -n "$chk" ] && text="$text $chk"
 # flock so two tabs reporting at once don't interleave keystrokes in the lead's input box
 ( flock -w 20 9; tmux send-keys -t "$LK_LEAD" -l "$text" && sleep 0.7 && tmux send-keys -t "$LK_LEAD" Enter && sleep 0.5 ) \
   9>"$LK_HOME/.report.lock" && echo "reported to the lead: $st" || { echo "report: logged, but the lead window $LK_LEAD is not running" >&2; exit 1; }

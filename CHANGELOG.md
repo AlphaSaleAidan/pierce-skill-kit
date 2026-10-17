@@ -32,8 +32,20 @@ again. On your Mac or Linux computer (not the server), once:
 - **`claude-tab -c`** reopens a tab on the folder's last conversation, so a tab that closed gets its context back.
   **`claude-tab -b brief.md`** opens a tab straight onto a brief (one step instead of two).
 - `brief-send` waits for a tab that's still starting, so the brief isn't typed before Claude is ready.
+- **`tab-sweep`** closes finished tabs safely: only when the last report is `done`, the work is committed, nothing
+  the tab started is still serving a port, and it's been quiet for `LK_SWEEP_IDLE_MIN` (30) minutes. Tabs that look
+  finished but fail a check are flagged with the reason. Each close is logged in `retired-tabs.md` with the exact
+  command that reopens it on its conversation. `--dry-run` shows what it would do. The lead runs it every round.
+- **Every report gets a cheap second look** (`report-check`): Jev on OpenRouter (about $0.00002 a report) if you
+  have a key, else Haiku, else free rules. A `done` with no or weak proof, or a claimed deploy/send/merge/payment,
+  is tagged in the lead's line so it gets verified before it's relayed. Logged; the daily digest lists tabs whose
+  "done" reports keep lacking proof. `LK_CHECK=off` turns it off.
+- **`job run <name> -- <cmd>`**: headless jobs under a watchdog. A crash relaunches it (up to `LK_JOB_TRIES`), a
+  Claude usage limit waits for the reset time and relaunches, and every failure, relaunch and finish is reported
+  to the lead. `tab-watch` also reports a job whose watchdog was killed. `job list`, `job stop`.
 - **`find-component` skill:** finds a ready-made component, animation, icon, 3D model, font, photo or sound that
-  matches a description, from ~45 sources with their licences, then re-skins it for the project.
+  matches a description, from ~45 sources with their licences, then re-skins it for the project. Optional
+  `jev-rank.sh` ranks a shortlist by fit for about $0.00002 an item.
 - `lead doctor` warns when the running tmux lacks the kit settings, when an account keeps its own conversations,
   and when the machine kills your tmux at logout.
 - Mac copy guide: iTerm2's one clipboard setting, Terminal.app's ⌘R, tmux running on the Mac copies via pbcopy.

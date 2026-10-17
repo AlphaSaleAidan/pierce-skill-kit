@@ -96,13 +96,16 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 |---|---|
 | `lead [-d]` | start the lead session (`hub:Lead`) or bring it back in this terminal |
 | `lead doctor` / `lead update [--auto-on\|--auto-off]` | check the setup / pull the latest kit and re-apply it |
-| `claude-tab <dir> -n <name> [-p task] [-r id] [-m model] [-a account] [-f]` | open a project tab; refuses a duplicate name/folder/session (`-f`: allow a second tab in a folder) |
+| `claude-tab <dir> -n <name> [-p task \| -b brief.md] [-r id \| -c] [-m model] [-a account] [-f]` | open a project tab; refuses a duplicate name/folder/session (`-b`: start on a brief, `-c`: pick up the folder's last conversation, `-f`: allow a second tab in a folder) |
 | `tab-view <hub:N>` | look at one tab in this terminal without moving anyone else's view |
 | `brief-send <tab> <brief.md>` | point a tab at a brief file in one line |
-| `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed` |
+| `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed`. Each one gets a cheap second look (`report-check`): a `done` without proof, or a claimed deploy/send/merge, is tagged so the lead checks it first |
+| `tab-sweep [--dry-run]` | close finished tabs: last report `done`, work committed, nothing still serving, quiet for a while. Flags the ones that aren't; logs how to reopen each |
 | `order add\|done\|wait\|list` | ledger of your asks, closed only with proof |
 | `tab-watch` | watchdog: flags tabs idle with no report (not ones waiting on you) |
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
+| `job run <name> -- <cmd>` | run a headless job under a watchdog: relaunched after a crash or a usage-limit reset, every step reported (`job list`, `job stop`) |
+| `ssh-setup me@server` | on your own computer: password-free login plus `lead` / `tab <name>` shortcuts ([Mac](docs/macos.md), [Windows](docs/windows.md)) |
 | `claude-acct [add\|list\|run]` | separate Claude accounts for separate purposes, shared setup, per-account usage ([docs/accounts.md](docs/accounts.md)) |
 | `lead-daily [--summary]` | end-of-day digest of reports, open orders, briefs and decisions |
 | `skill-route-sync [--confirm name] [--dry-run]` / `skill-add <owner/repo>` | route every installed skill in your skill router; install skills and route them |

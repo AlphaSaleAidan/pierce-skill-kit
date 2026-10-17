@@ -1,0 +1,57 @@
+#!/bin/sh
+# job - run a headless job (a `claude -p` run, a render, a batch) under a watchdog, so it never dies silently.
+#   job run <name> [-t tries] -- <command...>   start it in the background and return
+#   job list                                    every job: state, tries, last log line
+#   job stop <name>                             stop it (and its watchdog)
+#   job check                                   report jobs whose watchdog itself died (tab-watch runs this)
+# If the command fails it is relaunched after $LK_JOB_RETRY_MIN minutes, up to -t tries (default $LK_JOB_TRIES).
+# If it stopped on a Claude usage limit, it waits for the reset time in the message (or $LK_JOB_LIMIT_WAIT_MIN)
+# and relaunches; that doesn't use up a try. Every failure, relaunch and finish goes to the lead via `report`.
+# Log: $LK_HOME/jobs/<name>/log. Jobs that stop on CPU/RAM go through `heavy`: job run x -- heavy <cmd>.
+. "$(dirname "$0")/lk-config"
+J=$LK_HOME/jobs; mkdir -p "$J"
+say() { "$(dirname "$0")/report" "$1" "$2" "job $1: $3" "$J/$1/log" >/dev/null 2>&1 || true; }
+alive() { [ -n "$1" ] && kill -0 "$1" 2>/dev/null; }
+reset_in() { # seconds until the usage limit in the log resets, or empty
+  t=$(tail -n 40 "$1" | grep -iE 'limit' | tail -1)
+  [ -n "$t" ] || return 0
+  e=$(printf '%s' "$t" | grep -oE 'limit reached\|[0-9]{10}' | grep -oE '[0-9]{10}')
+  [ -z "$e" ] && { r=$(printf '%s' "$t" | grep -oiE 'resets?( at)? [0-9]{1,2}(:[0-9]{2})? ?(am|pm)' | sed -E 's/^[Rr]esets?( at)? //');
+    [ -n "$r" ] && e=$(date -d "$r" +%s 2>/dev/null) && [ "$e" -le "$(date +%s)" ] && e=$((e + 86400)); }
+  if [ -n "$e" ]; then echo $((e - $(date +%s) + LK_JOB_LIMIT_PAD_S)); else echo $((LK_JOB_LIMIT_WAIT_MIN * 60)); fi; }
+
+case $1 in
+  run) name=$2; shift 2; tries=$LK_JOB_TRIES
+    echo "$name" | grep -qE '^[A-Za-z0-9._-]+$' || { echo "job: name takes letters, digits, dot, dash" >&2; exit 2; }
+    [ "$1" = -t ] && { tries=$2; shift 2; }; [ "$1" = -- ] && shift
+    [ $# -gt 0 ] || { sed -n 2,6p "$0"; exit 2; }
+    d=$J/$name; alive "$(cat "$d/pid" 2>/dev/null)" && { echo "job: $name is already running (job stop $name)" >&2; exit 3; }
+    mkdir -p "$d"; : > "$d/log"; printf '%s\n' "$*" > "$d/cmd"; echo 0 > "$d/tries"; echo starting > "$d/state"
+    setsid nohup "$0" _watch "$name" "$tries" "$@" < /dev/null > /dev/null 2>&1 &
+    echo "job $name started (log: $d/log)";;
+  _watch) name=$2; tries=$3; shift 3; d=$J/$name; echo $$ > "$d/pid"; n=0
+    while :; do
+      echo running > "$d/state"; "$@" >> "$d/log" 2>&1; rc=$?
+      [ "$(cat "$d/state")" = stopped ] && exit 0
+      if [ "$rc" = 0 ]; then echo "done" > "$d/state"; say "$name" "done" "finished"; exit 0; fi
+      wait_s=$(reset_in "$d/log")
+      if [ -n "$wait_s" ]; then
+        echo waiting > "$d/state"; say "$name" progress "hit a usage limit (exit $rc); relaunching at $(date -d "@$(( $(date +%s) + wait_s ))" +%H:%M)"
+        sleep "$wait_s"; echo "--- relaunch after usage limit $(date -u +%FT%TZ)" >> "$d/log"; continue
+      fi
+      n=$((n + 1)); echo "$n" > "$d/tries"
+      if [ "$n" -ge "$tries" ]; then echo failed > "$d/state"; say "$name" failed "exit $rc, gave up after $n tries"; exit 1; fi
+      echo waiting > "$d/state"; say "$name" progress "exit $rc; relaunching in $LK_JOB_RETRY_MIN min (try $((n + 1))/$tries)"
+      sleep $((LK_JOB_RETRY_MIN * 60)); echo "--- relaunch try $((n + 1)) $(date -u +%FT%TZ)" >> "$d/log"
+    done;;
+  list) for d in "$J"/*/; do [ -f "$d/state" ] || continue; n=$(basename "$d")
+      printf '%-18s %-9s tries %s  %s\n' "$n" "$(cat "$d/state")" "$(cat "$d/tries")" "$(tail -n 1 "$d/log" | cut -c1-70)"; done;;
+  stop) d=$J/$2; p=$(cat "$d/pid" 2>/dev/null); alive "$p" || { echo "job: $2 is not running"; exit 1; }
+    echo stopped > "$d/state"; kill -- "-$p" 2>/dev/null || kill "$p"; echo "stopped $2";;
+  check) for d in "$J"/*/; do [ -f "$d/state" ] || continue; n=$(basename "$d")
+      case $(cat "$d/state") in running|waiting|starting)
+        alive "$(cat "$d/pid" 2>/dev/null)" && continue
+        echo died > "$d/state"; say "$n" failed "its watchdog died (restart or out of memory); start it again: job run $n -- $(cat "$d/cmd")"
+        echo "reported: $n died";; esac; done;;
+  *) sed -n 2,9p "$0"; exit 2;;
+esac

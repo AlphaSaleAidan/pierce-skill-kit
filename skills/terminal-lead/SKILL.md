@@ -16,9 +16,12 @@ nothing silently stuck, the human told only what changed, every claim verified.
 ## 2. One tab per project
 - Before opening: if the project already has a tab, brief that one. `claude-tab` refuses (exit 3)
   a duplicate name, an already-running resume id, or a folder another tab works in.
-- Open: `claude-tab <dir> -n <Project> [-r <resume-id>] -p "<brief pointer>"`.
-- Close a finished tab: its work is committed and reported → `tmux kill-window` → note the resume id
-  somewhere you can find it (e.g. `$LK_HOME/retired-tabs.md`).
+- Open: `claude-tab <dir> -n <Project> -b <brief.md>` (straight onto the brief). A tab that closed comes back
+  with its conversation: `claude-tab <dir> -n <Project> -c` (or `-r <id>` from `$LK_HOME/retired-tabs.md`).
+- Close finished tabs with `tab-sweep` every round (`--dry-run` to look first). It closes only a tab whose last
+  report is `done`, with its work committed, nothing still serving and quiet for a while, and logs how to
+  reopen it. A `FLAG` line means "looks finished but isn't safe to close": ask the tab to commit or stop it.
+  Never close a tab with uncommitted work or an open `needs-human` question by hand either.
 - Tab names = project names, not task names, so they stay stable.
 
 ## 3. Briefs: one file per task
@@ -38,7 +41,8 @@ nothing silently stuck, the human told only what changed, every claim verified.
 ## 5. Reports: one path in
 - Tabs report ONLY with `report <project> <done|progress|blocked|needs-human|failed> "<line>" [proof]`.
   It lands in this window as `[REPORT …]` and in `$LK_HOME/reports.tsv`.
-- `[REPORT done]` → check the proof yourself, then tell the human. `needs-human` → put the question in
+- `[REPORT done]` → check the proof yourself, then tell the human. A `{check …: no/weak proof}` or
+  `claims a deploy/send/merge` tag means verify it before you relay it: open the link, read the commit, look. `needs-human` → put the question in
   front of them this turn. `failed|blocked` → unblock or decide this turn.
 - `[WATCH]` lines come from tab-watch: look at that tab, then nudge or close it.
 
@@ -63,8 +67,10 @@ nothing silently stuck, the human told only what changed, every claim verified.
    A row with no movement in 48 h → nudge its tab or flag it.
 5. Each tab: stuck on a prompt? idle with work queued? finished → report or close.
 6. Spend: any metered API running without a dollar-quoted OK → stop it.
-7. Automations (cron jobs, heartbeats): check their output, not just that they ran.
-8. Tell the human ≤3 lines, only if something changed.
+7. Automations (cron jobs, heartbeats): check their output, not just that they ran. Headless jobs run under
+   `job run <name> -- <cmd>` so a crash or usage limit relaunches and reports; `job list` shows them.
+8. `tab-sweep`: close finished tabs, chase the flagged ones.
+9. Tell the human ≤3 lines, only if something changed.
 
 Remote probes (e.g. a Mac over ssh) only when needed; if that machine is loaded, stop probing it.
 Don't run rounds on a short timer. Reports and `[WATCH]` lines wake you; see docs/loops.md.

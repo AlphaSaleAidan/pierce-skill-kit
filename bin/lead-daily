@@ -9,6 +9,11 @@ raw=$(
   echo "# Digest since $since"
   echo "## Reports"
   awk -F'\t' -v s="$since" 'NR>1 && $1>=s {printf "- %s %s [%s] %s %s\n",$1,$2,$3,$4,($5?"("$5")":"")}' "$LK_HOME/reports.tsv" 2>/dev/null
+  echo "## Report checks (thin or risky claims, by tab)"
+  awk -F'\t' -v s="$since" 'NR>1 && $1>=s {n[$2]++; if ($3=="done" && $4!="strong") t[$2]++; if ($5=="true") r[$2]++}
+    END {for (k in n) if (t[k] || r[k]) printf "- %s: %d of %d reports were \"done\" without solid proof, %d claimed a deploy/send/merge\n", k, t[k]+0, n[k], r[k]+0}' "$LK_HOME/report-checks.tsv" 2>/dev/null
+  echo "## Jobs"
+  "$(dirname "$0")/job" list
   echo "## Open orders"
   "$(dirname "$0")/order" list
   echo "## Briefs written"
