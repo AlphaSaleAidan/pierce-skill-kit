@@ -169,7 +169,7 @@ makes one call per report, plan-grade one per direction plus a headless Sonnet c
 - Router (`hybrid`) on 40 held-out reports vs labels made independently: needs the owner 90%, blocked 92%, done and
   proven 90%, right plan 100%, right order rows 85%, says what's next 82%, urgency 55%. Urgency never acts on
   its own.
-- Jev alone was weaker (72 / 55 / 88 / 70% on the fields it was scored on), but every answer it gave with 0.9+
+- Jev alone was weaker (needs_owner 72%, blocked 55%, done_proven 88%, plan 70%), but every answer it gave with 0.9+
   confidence on the 60-report tuning set was right. So `hybrid` lets Jev win a field only when it's that sure,
   and sends disagreements to the lead.
 - Plan-grade: Jev was confident on only about 30% of directions; a Sonnet check decides the rest.
