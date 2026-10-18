@@ -19,7 +19,7 @@ Then keep a short router file mapping your recurring jobs to skills. Copy
 - **Process skills before implementation skills** (plan → build → verify).
 - **Refresh it** when new skills show up that fit work you repeat.
 
-The two lead/tab skills shipped here (the other 22 are indexed in [SKILLS.md](../SKILLS.md)):
+The two lead/tab skills shipped here (the other 23 are indexed in [SKILLS.md](../SKILLS.md)):
 - `terminal-lead`: how the lead runs tabs, briefs, orders and reports.
 - `project-tab`: how a project tab plans, uses subagents, grades and reports.
 

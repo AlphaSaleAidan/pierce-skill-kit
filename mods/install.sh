@@ -3,6 +3,7 @@
 #   mods/install.sh agent-board|model-map|projects-hub     plugin mods (loaded via CLAUDE_CODE_PLUGIN_DIRS)
 #   mods/install.sh statusline                             the status line
 #   mods/install.sh skill-recommender                      suggests a better-fitting skill on tough tasks (needs Node)
+#   mods/install.sh brain-loop                             vault + report router + plan grading + MCP + /brain page (needs python3)
 #   mods/install.sh hook lead-guard|review-gate|mail-no-links [matcher]
 #   add --uninstall to any of these to remove it.          Restart Claude Code afterwards. Needs jq.
 set -e
@@ -55,6 +56,19 @@ case $what in
       [ -f "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skill-index.json" ] || "$HOME/.local/bin/skill-route-sync" --quiet >/dev/null 2>&1 || true
       echo "installed skill-recommender -> $d (restart Claude Code; stats: node $d/recommend.js stats)"
     fi;;
+  brain-loop)
+    d=$DEST/brain-loop; c="$d/bin/brain-loop hook session-start"; BIN=$HOME/.local/bin
+    edit --arg d "$d" '.hooks.SessionStart = ((.hooks.SessionStart // []) | map(.hooks |= map(select((.command // "") | contains($d) | not))) | map(select((.hooks | length) > 0))) | if (.hooks.SessionStart | length) == 0 then del(.hooks.SessionStart) else . end'
+    if [ -n "$un" ]; then
+      rm -rf "$d"; [ -L "$BIN/brain-loop" ] && rm -f "$BIN/brain-loop"
+      echo "removed brain-loop (your vault, plans and logs under \$LK_HOME stay; drop the MCP server with: claude mcp remove brain -s user)"
+    else
+      command -v python3 >/dev/null || { echo "brain-loop needs python3"; exit 1; }
+      mkdir -p "$DEST" "$BIN"; rm -rf "$d"; cp -r brain-loop "$d"; ln -sf "$d/bin/brain-loop" "$BIN/brain-loop"
+      edit --arg c "$c" '.hooks.SessionStart = ((.hooks.SessionStart // []) + [{hooks: [{type: "command", command: $c, timeout: 10}]}])'
+      echo "installed brain-loop -> $d (brain-loop in $BIN; SessionStart hook added; restart Claude Code)"
+      echo "  next: brain-loop build    then register the MCP tools:  claude mcp add -s user brain -- $BIN/brain-loop mcp"
+    fi;;
   hook)
     name=$2
     case $name in
@@ -62,7 +76,7 @@ case $what in
       review-gate) f=review-gate.sh; m=${3:-Bash};;
       mail-no-links) f=mail-no-links.sh; m=$3
         [ -n "$un" ] || [ -n "$m" ] || { echo "mail-no-links needs your mail tool names as the matcher, e.g. 'mcp__mail__send_message|mcp__mail__create_draft'"; exit 2; };;
-      *) sed -n 2,6p "$0"; exit 2;;
+      *) sed -n 2,8p "$0"; exit 2;;
     esac
     c="$HOME/.config/pierce-skill-kit/hooks/$f"
     edit --arg c "$c" '.hooks.PreToolUse = ((.hooks.PreToolUse // []) | map(.hooks |= map(select(.command != $c))) | map(select((.hooks | length) > 0)))'
@@ -71,5 +85,5 @@ case $what in
       edit --arg c "$c" --arg m "$m" '.hooks.PreToolUse += [{matcher: $m, hooks: [{type: "command", command: $c}]}]'
       echo "installed hook $name on '$m'"
     fi;;
-  *) sed -n 2,6p "$0"; exit 2;;
+  *) sed -n 2,8p "$0"; exit 2;;
 esac

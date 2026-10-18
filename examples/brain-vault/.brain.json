@@ -1,0 +1,581 @@
+{
+"built": "2026-10-15T12:00",
+"nodes": [
+{
+"id": "acme-site",
+"type": "project",
+"title": "Acme site",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-14",
+"deg": 23
+},
+{
+"id": "acme-site-context",
+"type": "memory",
+"title": "Acme wants checkout live before their 2026-10-24 promo; Dana Example approves all copy",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-12",
+"deg": 5
+},
+{
+"id": "beta-app",
+"type": "project",
+"title": "Beta app",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-15",
+"deg": 9
+},
+{
+"id": "c-in-l1",
+"type": "commitment",
+"title": "Lee Placeholder: Harbor Cafe deposit",
+"open": true,
+"kind": "money-in",
+"status": "open",
+"date": "2026-10-14",
+"deg": 4
+},
+{
+"id": "c-in-l2",
+"type": "commitment",
+"title": "Dana Example: Acme site phase 1",
+"open": true,
+"kind": "money-in",
+"status": "overdue",
+"date": "2026-10-01",
+"deg": 4
+},
+{
+"id": "c-in-l4",
+"type": "commitment",
+"title": "Dana Example: Acme site deposit",
+"open": false,
+"kind": "money-in",
+"status": "paid",
+"date": "2026-09-20",
+"deg": 4
+},
+{
+"id": "c-order-1",
+"type": "commitment",
+"title": "Checkout page on acme-site takes card payments in test mode",
+"open": true,
+"kind": "ask",
+"status": "open",
+"date": "2026-10-10",
+"deg": 4
+},
+{
+"id": "c-order-2",
+"type": "commitment",
+"title": "Send Dana the staging link once checkout works",
+"open": true,
+"kind": "ask",
+"status": "open",
+"date": "2026-10-10",
+"deg": 6
+},
+{
+"id": "c-order-3",
+"type": "commitment",
+"title": "Beta app store listing with screenshots from Sam",
+"open": true,
+"kind": "ask",
+"status": "waiting",
+"date": "2026-10-11",
+"deg": 4
+},
+{
+"id": "c-order-4",
+"type": "commitment",
+"title": "Harbor Cafe menu page with prices",
+"open": true,
+"kind": "ask",
+"status": "open",
+"date": "2026-10-12",
+"deg": 4
+},
+{
+"id": "c-order-5",
+"type": "commitment",
+"title": "Acme site logo swap",
+"open": false,
+"kind": "ask",
+"status": "done",
+"date": "2026-10-08",
+"deg": 2
+},
+{
+"id": "c-out-l3",
+"type": "commitment",
+"title": "Sam Sample: Beta app screenshots",
+"open": true,
+"kind": "money-out",
+"status": "open",
+"date": "2026-10-05",
+"deg": 4
+},
+{
+"id": "c-wait-10-14-0910-acme-site",
+"type": "commitment",
+"title": "acme-site: checkout works in test mode (row 1). OK to send Dana the staging link? NEXT: s…",
+"open": true,
+"kind": "waiting-on-owner",
+"status": "waiting",
+"date": "2026-10-14",
+"deg": 4
+},
+{
+"id": "c-wait-10-14-1730-harbor-cafe",
+"type": "commitment",
+"title": "harbor-cafe: Lee asked for a $150 deposit invoice before launch; which option: card link…",
+"open": true,
+"kind": "waiting-on-owner",
+"status": "waiting",
+"date": "2026-10-14",
+"deg": 4
+},
+{
+"id": "d-2026-10-10-0000-checkout-ships-in-test-mode-fi",
+"type": "decision",
+"title": "checkout ships in test mode first; live card payments only after the owner's OK (owner, v…",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-10",
+"deg": 2
+},
+{
+"id": "d-2026-10-12-0000-menu-prices-come-from-the-shee",
+"type": "decision",
+"title": "menu prices come from the sheet Lee sent, not the old PDF",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-12",
+"deg": 4
+},
+{
+"id": "d-2026-10-13-0900-use-simulator-screenshots-if-s",
+"type": "decision",
+"title": "use simulator screenshots if Sam misses Friday",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-13",
+"deg": 4
+},
+{
+"id": "dana-example",
+"type": "person",
+"title": "Dana Example",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-14",
+"deg": 15
+},
+{
+"id": "harbor-cafe",
+"type": "project",
+"title": "Harbor Cafe",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-14",
+"deg": 13
+},
+{
+"id": "index",
+"type": "index",
+"title": "Brain home",
+"open": null,
+"kind": null,
+"status": null,
+"date": "",
+"deg": 6
+},
+{
+"id": "lee-placeholder",
+"type": "person",
+"title": "Lee Placeholder",
+"open": null,
+"kind": "client",
+"status": null,
+"date": "2026-10-14",
+"deg": 11
+},
+{
+"id": "plan-acme-site-1013-checkout",
+"type": "plan",
+"title": "acme-site: checkout in test mode",
+"open": null,
+"kind": null,
+"status": "active",
+"date": "2026-10-13",
+"deg": 8
+},
+{
+"id": "plan-harbor-cafe-1012-menu",
+"type": "plan",
+"title": "harbor-cafe: menu page",
+"open": null,
+"kind": null,
+"status": "active",
+"date": "2026-10-12",
+"deg": 6
+},
+{
+"id": "proof-before-done",
+"type": "rule",
+"title": "Never report done without a checked link or a screenshot path; two thin \"done\" reports on…",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-11",
+"deg": 3
+},
+{
+"id": "sam-sample",
+"type": "person",
+"title": "Sam Sample",
+"open": null,
+"kind": null,
+"status": null,
+"date": "2026-10-15",
+"deg": 9
+}
+],
+"links": [
+[
+"acme-site",
+"dana-example"
+],
+[
+"acme-site",
+"c-in-l2"
+],
+[
+"acme-site",
+"c-order-1"
+],
+[
+"acme-site",
+"c-order-2"
+],
+[
+"acme-site",
+"c-wait-10-14-0910-acme-site"
+],
+[
+"acme-site",
+"c-order-5"
+],
+[
+"acme-site",
+"c-in-l4"
+],
+[
+"acme-site",
+"plan-acme-site-1013-checkout"
+],
+[
+"acme-site",
+"d-2026-10-10-0000-checkout-ships-in-test-mode-fi"
+],
+[
+"acme-site",
+"acme-site-context"
+],
+[
+"acme-site",
+"proof-before-done"
+],
+[
+"acme-site-context",
+"proof-before-done"
+],
+[
+"acme-site-context",
+"acme-site"
+],
+[
+"acme-site-context",
+"dana-example"
+],
+[
+"beta-app",
+"sam-sample"
+],
+[
+"beta-app",
+"c-out-l3"
+],
+[
+"beta-app",
+"c-order-3"
+],
+[
+"beta-app",
+"d-2026-10-13-0900-use-simulator-screenshots-if-s"
+],
+[
+"c-in-l1",
+"harbor-cafe"
+],
+[
+"c-in-l1",
+"lee-placeholder"
+],
+[
+"c-in-l2",
+"acme-site"
+],
+[
+"c-in-l2",
+"dana-example"
+],
+[
+"c-in-l4",
+"acme-site"
+],
+[
+"c-in-l4",
+"dana-example"
+],
+[
+"c-order-1",
+"acme-site"
+],
+[
+"c-order-1",
+"plan-acme-site-1013-checkout"
+],
+[
+"c-order-2",
+"acme-site"
+],
+[
+"c-order-2",
+"dana-example"
+],
+[
+"c-order-2",
+"plan-acme-site-1013-checkout"
+],
+[
+"c-order-3",
+"beta-app"
+],
+[
+"c-order-3",
+"sam-sample"
+],
+[
+"c-order-4",
+"harbor-cafe"
+],
+[
+"c-order-4",
+"plan-harbor-cafe-1012-menu"
+],
+[
+"c-order-5",
+"acme-site"
+],
+[
+"c-out-l3",
+"beta-app"
+],
+[
+"c-out-l3",
+"sam-sample"
+],
+[
+"c-wait-10-14-0910-acme-site",
+"acme-site"
+],
+[
+"c-wait-10-14-0910-acme-site",
+"dana-example"
+],
+[
+"c-wait-10-14-1730-harbor-cafe",
+"harbor-cafe"
+],
+[
+"c-wait-10-14-1730-harbor-cafe",
+"lee-placeholder"
+],
+[
+"d-2026-10-10-0000-checkout-ships-in-test-mode-fi",
+"acme-site"
+],
+[
+"d-2026-10-12-0000-menu-prices-come-from-the-shee",
+"harbor-cafe"
+],
+[
+"d-2026-10-12-0000-menu-prices-come-from-the-shee",
+"lee-placeholder"
+],
+[
+"d-2026-10-13-0900-use-simulator-screenshots-if-s",
+"beta-app"
+],
+[
+"d-2026-10-13-0900-use-simulator-screenshots-if-s",
+"sam-sample"
+],
+[
+"dana-example",
+"acme-site"
+],
+[
+"dana-example",
+"c-in-l2"
+],
+[
+"dana-example",
+"c-order-2"
+],
+[
+"dana-example",
+"c-wait-10-14-0910-acme-site"
+],
+[
+"dana-example",
+"c-in-l4"
+],
+[
+"dana-example",
+"plan-acme-site-1013-checkout"
+],
+[
+"dana-example",
+"acme-site-context"
+],
+[
+"harbor-cafe",
+"lee-placeholder"
+],
+[
+"harbor-cafe",
+"c-order-4"
+],
+[
+"harbor-cafe",
+"c-in-l1"
+],
+[
+"harbor-cafe",
+"c-wait-10-14-1730-harbor-cafe"
+],
+[
+"harbor-cafe",
+"plan-harbor-cafe-1012-menu"
+],
+[
+"harbor-cafe",
+"d-2026-10-12-0000-menu-prices-come-from-the-shee"
+],
+[
+"index",
+"acme-site"
+],
+[
+"index",
+"beta-app"
+],
+[
+"index",
+"harbor-cafe"
+],
+[
+"index",
+"dana-example"
+],
+[
+"index",
+"sam-sample"
+],
+[
+"index",
+"lee-placeholder"
+],
+[
+"lee-placeholder",
+"harbor-cafe"
+],
+[
+"lee-placeholder",
+"c-in-l1"
+],
+[
+"lee-placeholder",
+"c-wait-10-14-1730-harbor-cafe"
+],
+[
+"lee-placeholder",
+"plan-harbor-cafe-1012-menu"
+],
+[
+"lee-placeholder",
+"d-2026-10-12-0000-menu-prices-come-from-the-shee"
+],
+[
+"plan-acme-site-1013-checkout",
+"c-order-1"
+],
+[
+"plan-acme-site-1013-checkout",
+"c-order-2"
+],
+[
+"plan-acme-site-1013-checkout",
+"acme-site"
+],
+[
+"plan-acme-site-1013-checkout",
+"dana-example"
+],
+[
+"plan-harbor-cafe-1012-menu",
+"c-order-4"
+],
+[
+"plan-harbor-cafe-1012-menu",
+"harbor-cafe"
+],
+[
+"plan-harbor-cafe-1012-menu",
+"lee-placeholder"
+],
+[
+"proof-before-done",
+"acme-site"
+],
+[
+"sam-sample",
+"beta-app"
+],
+[
+"sam-sample",
+"c-out-l3"
+],
+[
+"sam-sample",
+"c-order-3"
+],
+[
+"sam-sample",
+"d-2026-10-13-0900-use-simulator-screenshots-if-s"
+]
+]
+}

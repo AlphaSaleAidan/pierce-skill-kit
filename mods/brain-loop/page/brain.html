@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<title>Brain</title>
+<style>
+:root{
+  --bg:#fbfbfa; --surface:#ffffff; --surface-2:#f3f3f1; --line:#e6e5e1; --line-2:#d9d8d3;
+  --text:#1d1f23; --muted:#6a6e76; --faint:#9a9ea6;
+  --accent:#3563c9; --accent-soft:rgba(53,99,201,.10);
+  --warm:#d9731f; --warm-soft:rgba(217,115,31,.12); --bad:#c2412d; --bad-soft:rgba(194,65,45,.10);
+  --c-project:#3563c9; --c-person:#24876a; --c-ask:#c06a24; --c-money:#a3802a;
+  --c-decision:#7b62b8; --c-plan:#2f8a9a; --c-rule:#8a7e6a; --c-memory:#a5a9b0; --c-closed:#c9c7c1;
+  --link:rgba(60,64,72,.13); --link-hi:rgba(53,99,201,.65);
+  --shadow:0 10px 30px rgba(20,22,28,.12),0 2px 6px rgba(20,22,28,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#141518; --surface:#1b1c20; --surface-2:#232429; --line:#2c2d33; --line-2:#383a41;
+    --text:#e7e7ea; --muted:#9a9ca5; --faint:#6c6f78;
+    --accent:#7aa2f0; --accent-soft:rgba(122,162,240,.14);
+    --warm:#f0954a; --warm-soft:rgba(240,149,74,.15); --bad:#ee7a66; --bad-soft:rgba(238,122,102,.13);
+    --c-project:#7aa2f0; --c-person:#5cc29f; --c-ask:#e8914c; --c-money:#d7b45a;
+    --c-decision:#a891e0; --c-plan:#5fb7c4; --c-rule:#b3a78f; --c-memory:#6f737c; --c-closed:#4a4c53;
+    --link:rgba(200,204,214,.10); --link-hi:rgba(122,162,240,.7);
+    --shadow:0 12px 34px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#141518; --surface:#1b1c20; --surface-2:#232429; --line:#2c2d33; --line-2:#383a41;
+  --text:#e7e7ea; --muted:#9a9ca5; --faint:#6c6f78;
+  --accent:#7aa2f0; --accent-soft:rgba(122,162,240,.14);
+  --warm:#f0954a; --warm-soft:rgba(240,149,74,.15); --bad:#ee7a66; --bad-soft:rgba(238,122,102,.13);
+  --c-project:#7aa2f0; --c-person:#5cc29f; --c-ask:#e8914c; --c-money:#d7b45a;
+  --c-decision:#a891e0; --c-plan:#5fb7c4; --c-rule:#b3a78f; --c-memory:#6f737c; --c-closed:#4a4c53;
+  --link:rgba(200,204,214,.10); --link-hi:rgba(122,162,240,.7);
+  --shadow:0 12px 34px rgba(0,0,0,.45),0 2px 6px rgba(0,0,0,.3);
+}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--text);overflow:hidden}
+body{font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;background:none;border:0;padding:0}
+svg.i{width:18px;height:18px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#app{display:flex;flex-direction:column;height:100vh;height:100dvh}
+
+/* header */
+header{flex:none;background:var(--bg);border-bottom:1px solid var(--line);padding:0 16px;padding-top:env(safe-area-inset-top);z-index:5}
+.bar{display:flex;align-items:center;gap:12px;height:52px}
+.brand{font-weight:650;font-size:17px;letter-spacing:-.01em;margin-right:auto;display:flex;align-items:center;gap:8px}
+.brand small{font-weight:450;font-size:12px;color:var(--faint)}
+.seg{display:flex;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px}
+.seg button{height:34px;padding:0 12px;border-radius:7px;color:var(--muted);font-size:14px;font-weight:550;display:flex;align-items:center;gap:6px;white-space:nowrap}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.seg .n{font-size:12px;font-weight:600;color:var(--warm);font-variant-numeric:tabular-nums}
+.searchrow{position:relative;padding-bottom:10px}
+.search{display:flex;align-items:center;gap:8px;height:42px;padding:0 6px 0 12px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;color:var(--muted)}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:var(--text);font-size:16px;height:100%}
+.search input::placeholder{color:var(--faint)}
+.search .clear{width:32px;height:32px;display:none;align-items:center;justify-content:center;border-radius:8px;color:var(--faint)}
+.search.has .clear{display:flex}
+#results{position:absolute;left:0;right:0;top:46px;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;box-shadow:var(--shadow);overflow:hidden;z-index:30;max-height:60vh;overflow-y:auto}
+#results button{display:flex;align-items:center;gap:10px;width:100%;min-height:44px;padding:8px 12px;text-align:left;border-top:1px solid var(--line)}
+#results button:first-child{border-top:0}
+#results button[aria-selected="true"],#results button:hover{background:var(--surface-2)}
+#results .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#results .k{font-size:12px;color:var(--faint)}
+.chips{display:flex;gap:6px;overflow-x:auto;padding-bottom:10px;scrollbar-width:none;margin:0 -16px;padding-left:16px;padding-right:16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;height:34px;padding:0 12px;border-radius:17px;border:1px solid var(--line-2);background:var(--surface);color:var(--muted);font-size:13.5px;font-weight:550;display:flex;align-items:center;gap:7px;white-space:nowrap;position:relative}
+.chip::after{content:"";position:absolute;inset:-4px -1px}
+.chip[aria-pressed="true"]{color:var(--text);border-color:var(--text)}
+.chip.mode[aria-pressed="true"]{background:var(--text);color:var(--bg);border-color:var(--text)}
+.chip:disabled{opacity:.38;cursor:default}
+.chip .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.chip[aria-pressed="false"] .dot{opacity:.35}
+.chip .c{font-size:12px;color:var(--faint);font-variant-numeric:tabular-nums}
+.chip.mode[aria-pressed="true"] .c{color:inherit;opacity:.7}
+.sep{flex:none;width:1px;background:var(--line-2);margin:6px 4px}
+
+/* main */
+main{flex:1;min-height:0;position:relative}
+#graph{position:absolute;inset:0}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas.drag{cursor:grabbing}
+canvas.pt{cursor:pointer}
+.status{position:absolute;left:16px;bottom:calc(14px + env(safe-area-inset-bottom));font-size:12px;color:var(--faint);pointer-events:none;font-variant-numeric:tabular-nums}
+.zoom{position:absolute;right:16px;bottom:calc(14px + env(safe-area-inset-bottom));display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line-2);border-radius:10px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.zoom button{width:42px;height:42px;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.zoom button+button{border-top:1px solid var(--line)}
+.zoom button:active{background:var(--surface-2)}
+.empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);text-align:center;padding:24px}
+
+/* list */
+#list{position:absolute;inset:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+.lwrap{max-width:860px;margin:0 auto;padding:4px 16px calc(32px + env(safe-area-inset-bottom))}
+.summary{display:flex;gap:10px;padding:12px 0 4px}
+.stat{flex:1;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.stat b{display:block;font-size:20px;font-weight:650;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.2}
+.stat span{font-size:12px;color:var(--muted)}
+.stat.warm b{color:var(--warm)}
+.lchips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;padding:10px 16px 6px;margin:0 -16px;position:sticky;top:0;background:var(--bg);z-index:2}
+.lchips::-webkit-scrollbar{display:none}
+.group{margin-top:14px}
+.gh{display:flex;align-items:baseline;gap:8px;font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:4px 2px 8px}
+.gh .c{font-weight:500;color:var(--faint)}
+.rows{background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:flex;gap:12px;width:100%;text-align:left;padding:12px 14px;min-height:64px;border-top:1px solid var(--line);align-items:flex-start}
+.row:first-child{border-top:0}
+.row:active,.row:hover{background:var(--surface-2)}
+.row .kb{width:3px;height:auto;align-self:stretch;border-radius:2px;flex:none;background:var(--line-2)}
+.row.k-ask .kb{background:var(--c-ask)} .row.k-waiting-on-owner .kb{background:var(--accent)} .row.k-money-in .kb,.row.k-money-out .kb{background:var(--c-money)}
+.row .main{flex:1;min-width:0}
+.row .title{font-size:15px;font-weight:550;line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+.row .meta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;margin-top:5px;font-size:12.5px;color:var(--muted)}
+.row .side{flex:none;text-align:right;font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums;min-width:64px}
+.row .side .d{font-weight:600;color:var(--text);font-size:13px}
+.row .side .late{color:var(--warm);font-weight:600}
+.row .amt{display:block;margin-top:4px;font-weight:650;color:var(--c-money);font-size:13.5px}
+.pill{display:inline-flex;align-items:center;height:20px;padding:0 7px;border-radius:5px;font-size:11.5px;font-weight:600;background:var(--surface-2);color:var(--muted);white-space:nowrap}
+.pill.s-stuck,.pill.s-forgotten,.pill.s-wrong{background:var(--bad-soft);color:var(--bad)}
+.pill.s-half{background:var(--warm-soft);color:var(--warm)}
+.pill.kind{background:transparent;border:1px solid var(--line-2)}
+.lempty{padding:40px 8px;text-align:center;color:var(--muted)}
+
+/* note panel */
+#panel{position:fixed;z-index:20;background:var(--surface);display:flex;flex-direction:column;box-shadow:var(--shadow)}
+#panel[hidden]{display:none}
+.phead{flex:none;display:flex;align-items:center;gap:4px;height:52px;padding:0 6px;border-bottom:1px solid var(--line)}
+.phead button{width:42px;height:42px;display:flex;align-items:center;justify-content:center;border-radius:10px;color:var(--muted)}
+.phead button:disabled{opacity:.3}
+.phead button:not(:disabled):active{background:var(--surface-2)}
+.phead .crumb{flex:1;min-width:0;font-size:12.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-align:center}
+.grab{display:none}
+.pbody{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding:16px 20px calc(28px + env(safe-area-inset-bottom))}
+.ntype{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.ntype .dot{width:8px;height:8px;border-radius:50%}
+.ntitle{font-size:20px;line-height:1.3;font-weight:650;letter-spacing:-.015em;margin:6px 0 12px;word-break:break-word}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px;background:var(--surface-2);border-radius:10px;padding:12px 14px;margin-bottom:16px}
+.facts dt{color:var(--muted)} .facts dd{margin:0;min-width:0;word-break:break-word}
+.md{font-size:15px;line-height:1.55;word-break:break-word}
+.md h2{font-size:15px;font-weight:650;margin:22px 0 8px;padding-top:14px;border-top:1px solid var(--line)}
+.md h3,.md h4{font-size:14px;font-weight:650;margin:16px 0 6px;color:var(--muted)}
+.md h1{font-size:18px;margin:16px 0 8px}
+.md p{margin:8px 0}
+.md ul,.md ol{margin:6px 0;padding-left:20px}
+.md li{margin:5px 0}
+.md li::marker{color:var(--faint)}
+.md code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;background:var(--surface-2);border-radius:4px;padding:1px 5px;word-break:break-all}
+.md blockquote{margin:8px 0;padding:2px 12px;border-left:3px solid var(--line-2);color:var(--muted)}
+.md .tw{overflow-x:auto;margin:8px 0}
+.md table{border-collapse:collapse;font-size:13px}
+.md td,.md th{border:1px solid var(--line);padding:5px 8px;text-align:left;vertical-align:top}
+.md a,.wl{color:var(--accent);text-decoration:none}
+.wl{border-bottom:1px solid var(--accent-soft)}
+.wl:hover{border-bottom-color:var(--accent)}
+.wl.missing{color:var(--muted);border-bottom-style:dashed}
+.bl{margin-top:24px;padding-top:14px;border-top:1px solid var(--line)}
+.bl h2{font-size:12px;font-weight:650;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 6px}
+.bl button.item{display:flex;align-items:center;gap:10px;width:100%;min-height:42px;text-align:left;padding:6px 4px;border-radius:8px}
+.bl button.item:active,.bl button.item:hover{background:var(--surface-2)}
+.bl .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.bl .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:14px}
+.bl .more{color:var(--accent);font-size:14px;font-weight:550;min-height:42px;padding:0 4px}
+.loading{color:var(--faint);padding:20px 0}
+
+@media (max-width: 759px){
+  #panel{left:0;right:0;bottom:0;height:74vh;height:74dvh;border-radius:16px 16px 0 0;border-top:1px solid var(--line)}
+  .grab{display:block;position:absolute;left:50%;top:6px;width:36px;height:4px;margin-left:-18px;border-radius:2px;background:var(--line-2)}
+  .phead{position:relative;padding-top:6px;height:56px}
+  .seg button{padding:0 10px}
+  .brand small{display:none}
+}
+@media (min-width: 760px){
+  header{padding:0 20px}
+  .top{display:flex;align-items:center;gap:16px}
+  .bar{flex:none}
+  .brand{margin-right:8px}
+  .searchrow{flex:1;max-width:420px;padding:0;margin-left:auto}
+  .chips{margin:0 -20px;padding-left:20px;padding-right:20px}
+  #panel{top:var(--hh,0px);right:0;bottom:0;width:440px;border-left:1px solid var(--line);box-shadow:-8px 0 24px rgba(0,0,0,.05)}
+  .pbody{padding:18px 24px 32px}
+}
+@media (prefers-reduced-motion: no-preference){
+  #panel{animation:pin .16s ease-out}
+  @keyframes pin{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></symbol>
+  <symbol id="i-graph" viewBox="0 0 24 24"><circle cx="6" cy="7" r="2.2"/><circle cx="18" cy="6" r="2.2"/><circle cx="12" cy="17" r="2.6"/><path d="M8 8l2.8 7M16.6 7.6 13.4 15M8.2 7h7.6"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r=".9"/><circle cx="4.5" cy="12" r=".9"/><circle cx="4.5" cy="18" r=".9"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-fit" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+  <symbol id="i-locate" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></symbol>
+</svg>
+<div id="app">
+  <header>
+    <div class="top">
+      <div class="bar">
+        <div class="brand">Brain <small id="built"></small></div>
+        <div class="seg" role="group" aria-label="View">
+          <button id="v-graph" aria-pressed="true"><svg class="i"><use href="#i-graph"/></svg>Graph</button>
+          <button id="v-list" aria-pressed="false"><svg class="i"><use href="#i-list"/></svg>Open list <span class="n" id="opencount"></span></button>
+        </div>
+      </div>
+      <div class="searchrow">
+        <label class="search" id="searchbox">
+          <svg class="i"><use href="#i-search"/></svg>
+          <input id="q" type="search" placeholder="Search notes" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="Search notes">
+          <button class="clear" id="qclear" aria-label="Clear search" type="button"><svg class="i"><use href="#i-x"/></svg></button>
+        </label>
+        <div id="results" hidden role="listbox"></div>
+      </div>
+    </div>
+    <div class="chips" id="chips" role="toolbar" aria-label="Graph filters"></div>
+  </header>
+  <main>
+    <div id="graph">
+      <canvas id="cv" aria-label="Graph of notes"></canvas>
+      <div class="status" id="gstatus"></div>
+      <div class="zoom">
+        <button id="zin" aria-label="Zoom in"><svg class="i"><use href="#i-plus"/></svg></button>
+        <button id="zout" aria-label="Zoom out"><svg class="i"><use href="#i-minus"/></svg></button>
+        <button id="zfit" aria-label="Fit graph"><svg class="i"><use href="#i-fit"/></svg></button>
+      </div>
+      <div class="empty" id="gempty" hidden></div>
+    </div>
+    <div id="list" hidden></div>
+  </main>
+</div>
+<aside id="panel" hidden aria-label="Note">
+  <div class="phead">
+    <span class="grab"></span>
+    <button id="pback" aria-label="Back" disabled><svg class="i"><use href="#i-back"/></svg></button>
+    <button id="plocate" aria-label="Show in graph"><svg class="i"><use href="#i-locate"/></svg></button>
+    <div class="crumb" id="pcrumb"></div>
+    <button id="pclose" aria-label="Close note"><svg class="i"><use href="#i-x"/></svg></button>
+  </div>
+  <div class="pbody" id="pbody"></div>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script>
+(function(){
+"use strict";
+if (!window.d3){
+  const el = document.getElementById('gempty'); el.hidden = false;
+  el.textContent = 'Could not load the graph library (cdnjs). Check the connection and reload.';
+  return;
+}
+// Relative URLs only. If served at ".../brain" (no slash) resolve against the last segment.
+const BASE = location.pathname.endsWith('/') ? '' : (location.pathname.split('/').pop() + '/');
+const RM = matchMedia('(prefers-reduced-motion: reduce)');
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = {get(k){try{return localStorage.getItem(k)}catch(e){return null}}, set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
+
+const TYPES = [
+  {key:'project', label:'Projects'}, {key:'person', label:'People'}, {key:'ask', label:'Asks'},
+  {key:'money', label:'Money'}, {key:'plan', label:'Plans'}, {key:'decision', label:'Decisions'}, {key:'rule', label:'Rules'}, {key:'memory', label:'Memory'}
+];
+const TYPE_NAME = {project:'Project', person:'Person', commitment:'Commitment', plan:'Plan', decision:'Decision', rule:'Rule', memory:'Memory', index:'Index'};
+const KIND_NAME = {'ask':'Ask', 'waiting-on-owner':'Waiting on me', 'money-in':'Money in', 'money-out':'Money out'};
+function keyOf(n){
+  if (n.type === 'commitment') return (n.kind || '').startsWith('money') ? 'money' : 'ask';
+  if (n.type === 'index') return 'project';
+  return n.type;
+}
+
+// ---------- state ----------
+const S = {
+  nodes: [], byId: new Map(), adj: new Map(), links: [],
+  mode: store.get('brain.mode') === 'all' ? 'all' : 'open',
+  types: new Set(TYPES.map(t => t.key)),
+  extra: new Set(), vis: [], visSet: new Set(), visLinks: [],
+  sel: null, hl: new Set(), view: 'graph', open: null, history: [], openItems: [],
+  listKind: 'all'
+};
+let C = {}; // theme colours
+function readTheme(){
+  const cs = getComputedStyle(document.documentElement), g = v => cs.getPropertyValue(v).trim();
+  C = {bg:g('--bg'), text:g('--text'), muted:g('--muted'), link:g('--link'), linkHi:g('--link-hi'), warm:g('--warm'), accent:g('--accent'),
+       closed:g('--c-closed'), project:g('--c-project'), person:g('--c-person'), ask:g('--c-ask'), money:g('--c-money'),
+       decision:g('--c-decision'), plan:g('--c-plan'), rule:g('--c-rule'), memory:g('--c-memory')};
+}
+function colorOf(n){
+  if (n.type === 'commitment' && n.open === false) return C.closed;
+  return C[keyOf(n)] || C.memory;
+}
+function cssColorOf(n){
+  if (n.type === 'commitment' && n.open === false) return 'var(--c-closed)';
+  return 'var(--c-' + keyOf(n) + ')';
+}
+
+// ---------- graph canvas ----------
+const cv = $('#cv'), ctx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1, T = d3.zoomIdentity, sim = null, running = false, userMoved = false, drawQueued = false;
+const zoom = d3.zoom().scaleExtent([0.04, 10]).clickDistance(6).tapDistance(12)
+  .on('zoom', e => { T = e.transform; if (e.sourceEvent) userMoved = true; requestDraw(); });
+const sel = d3.select(cv);
+
+function radius(n){ return Math.min(18, 2.6 + Math.sqrt(n.deg || 1) * (n.type === 'project' || n.type === 'person' ? 1.05 : 0.8)); }
+
+function resize(){
+  const r = cv.getBoundingClientRect();
+  W = Math.max(1, r.width); H = Math.max(1, r.height); DPR = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+  requestDraw();
+}
+function requestDraw(){ if (!drawQueued){ drawQueued = true; requestAnimationFrame(() => { drawQueued = false; draw(); }); } }
+
+// Visible area (excludes the note panel) so focused nodes are not hidden under it.
+function viewBox(){
+  const p = $('#panel');
+  if (p.hidden || S.view !== 'graph') return {x:0, y:0, w:W, h:H};
+  if (isPhone()) { const ph = p.getBoundingClientRect().height; const top = cv.getBoundingClientRect().top; const visH = Math.max(120, window.innerHeight - ph - top); return {x:0, y:0, w:W, h:Math.min(H, visH)}; }
+  return {x:0, y:0, w:Math.max(200, W - p.getBoundingClientRect().width), h:H};
+}
+function isPhone(){ return window.innerWidth < 760; }
+
+function draw(){
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  ctx.fillStyle = C.bg; ctx.fillRect(0,0,W,H);
+  if (!S.vis.length) return;
+  const k = T.k, hasSel = !!S.sel && S.visSet.has(S.sel.id);
+  ctx.save(); ctx.translate(T.x, T.y); ctx.scale(k, k);
+  // links
+  ctx.lineWidth = Math.max(0.6 / k, 0.35); ctx.strokeStyle = C.link; ctx.beginPath();
+  for (const l of S.visLinks){ ctx.moveTo(l.source.x, l.source.y); ctx.lineTo(l.target.x, l.target.y); }
+  ctx.stroke();
+  if (hasSel){
+    ctx.strokeStyle = C.linkHi; ctx.lineWidth = Math.max(1.3 / k, 0.5); ctx.beginPath();
+    for (const l of S.visLinks){ if (l.source === S.sel || l.target === S.sel){ ctx.moveTo(l.source.x, l.source.y); ctx.lineTo(l.target.x, l.target.y); } }
+    ctx.stroke();
+  }
+  // viewport cull bounds in graph space
+  const x0 = -T.x / k - 20, y0 = -T.y / k - 20, x1 = (W - T.x) / k + 20, y1 = (H - T.y) / k + 20;
+  for (const pass of [0, 1]){ // pass 0 = dimmed, pass 1 = normal/highlighted (drawn on top)
+    for (const n of S.vis){
+      if (n.x < x0 || n.x > x1 || n.y < y0 || n.y > y1) continue;
+      const on = !hasSel || S.hl.has(n.id);
+      if ((pass === 1) !== on) continue;
+      const r = n._r;
+      ctx.globalAlpha = on ? 1 : 0.16;
+      ctx.beginPath(); ctx.arc(n.x, n.y, r, 0, 6.2832); ctx.fillStyle = colorOf(n); ctx.fill();
+      if (n.type === 'commitment' && n.open){
+        ctx.lineWidth = Math.max(1.6 / k, r * 0.42); ctx.strokeStyle = C.warm;
+        ctx.beginPath(); ctx.arc(n.x, n.y, r + ctx.lineWidth * 0.5 + 0.6 / k, 0, 6.2832); ctx.stroke();
+      }
+    }
+  }
+  ctx.globalAlpha = 1;
+  if (hasSel){
+    const n = S.sel; ctx.lineWidth = 2 / k; ctx.strokeStyle = C.text;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n._r + 5 / k, 0, 6.2832); ctx.stroke();
+  }
+  ctx.restore();
+  drawLabels(hasSel);
+}
+
+function drawLabels(hasSel){
+  const k = T.k, cand = [];
+  const showAll = k >= 1.7;
+  for (const n of S.vis){
+    const sx = T.applyX(n.x), sy = T.applyY(n.y);
+    if (sx < -60 || sx > W + 60 || sy < -20 || sy > H + 20) continue;
+    let pri;
+    if (hasSel && n === S.sel) pri = 1e9;
+    else if (hasSel && S.hl.has(n.id)) pri = 1e6 + n.deg;
+    else if (n.type === 'project' || n.type === 'person') pri = (k > 0.35 || n.deg > 25) ? 1e4 + n.deg : -1;
+    else pri = showAll ? n.deg : -1;
+    if (hasSel && !S.hl.has(n.id) && pri < 1e4) pri = -1;
+    if (pri >= 0) cand.push([pri, n, sx, sy]);
+  }
+  cand.sort((a, b) => b[0] - a[0]);
+  const placed = [], max = isPhone() ? 70 : 160;
+  ctx.font = '500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif';
+  ctx.textBaseline = 'middle'; ctx.lineJoin = 'round';
+  let count = 0;
+  for (const [pri, n, sx, sy] of cand){
+    if (count >= max) break;
+    const hub = n.type === 'project' || n.type === 'person';
+    let t = n.title || n.id; const lim = (pri >= 1e6) ? 42 : (hub ? 26 : 30);
+    if (t.length > lim) t = t.slice(0, lim - 1).trimEnd() + '…';
+    const w = ctx.measureText(t).width, rr = n._r * k;
+    const x = sx + rr + 4, y = sy, box = [x - 2, y - 8, x + w + 2, y + 8];
+    let hit = false;
+    for (const b of placed){ if (box[0] < b[2] && box[2] > b[0] && box[1] < b[3] && box[3] > b[1]){ hit = true; break; } }
+    if (hit && pri < 1e9) continue;
+    placed.push(box); count++;
+    const dim = hasSel && !S.hl.has(n.id);
+    ctx.globalAlpha = dim ? 0.35 : 1;
+    ctx.lineWidth = 3.5; ctx.strokeStyle = C.bg; ctx.strokeText(t, x, y);
+    ctx.fillStyle = (hub || pri >= 1e6) ? C.text : C.muted;
+    if (n === S.sel) ctx.font = '650 12.5px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif';
+    ctx.fillText(t, x, y);
+    if (n === S.sel) ctx.font = '500 12px -apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,Roboto,sans-serif';
+  }
+  ctx.globalAlpha = 1;
+}
+
+function hitTest(px, py){
+  let best = null, bd = Infinity;
+  for (const n of S.vis){
+    const sx = T.applyX(n.x), sy = T.applyY(n.y), dx = sx - px, dy = sy - py, d = dx*dx + dy*dy;
+    const thr = Math.max(n._r * T.k + 4, 16);
+    if (d < thr * thr && d < bd){ bd = d; best = n; }
+  }
+  return best;
+}
+
+// ---------- filtering + simulation ----------
+function computeVisible(){
+  let base;
+  if (S.mode === 'open'){
+    base = new Set();
+    for (const n of S.nodes){
+      if (n.type === 'commitment' && n.open){
+        base.add(n.id);
+        for (const m of S.adj.get(n.id) || []){ const o = S.byId.get(m); if (o && (o.type === 'project' || o.type === 'person')) base.add(m); }
+      }
+    }
+  } else base = new Set(S.nodes.map(n => n.id));
+  const vis = new Set();
+  for (const id of base){ const n = S.byId.get(id); if (S.types.has(keyOf(n))) vis.add(id); }
+  for (const id of S.extra) if (S.byId.has(id)) vis.add(id);
+  return vis;
+}
+function rebuild(keepView){
+  const prev = S.visSet, vis = computeVisible();
+  S.visSet = vis; S.vis = S.nodes.filter(n => vis.has(n.id));
+  S.visLinks = [];
+  for (const [a, b] of S.links){ if (vis.has(a) && vis.has(b)) S.visLinks.push({source:S.byId.get(a), target:S.byId.get(b)}); }
+  let fresh = 0;
+  for (const n of S.vis){
+    n.fx = null; n.fy = null;
+    if (n.x == null){
+      // seed near an already placed neighbour so new nodes don't explode in from the centre
+      let nb = null; for (const m of S.adj.get(n.id) || []){ const o = S.byId.get(m); if (o && vis.has(m) && o.x != null){ nb = o; break; } }
+      const a = Math.random() * 6.283, d = nb ? 12 + Math.random() * 18 : 40 + Math.random() * Math.sqrt(S.vis.length) * 14;
+      n.x = (nb ? nb.x : 0) + Math.cos(a) * d; n.y = (nb ? nb.y : 0) + Math.sin(a) * d; fresh++;
+    }
+  }
+  const big = S.vis.length > 500;
+  if (!sim){
+    sim = d3.forceSimulation().stop()
+      .force('charge', d3.forceManyBody().theta(0.95).distanceMax(500))
+      .force('link', d3.forceLink().id(d => d.id))
+      .force('x', d3.forceX(0)).force('y', d3.forceY(0));
+  }
+  for (const n of S.vis) n._dv = 0;
+  for (const l of S.visLinks){ l.source._dv++; l.target._dv++; }
+  sim.nodes(S.vis);
+  const gs = n => n._dv ? 0.045 : 0.22;
+  sim.force('x').strength(gs); sim.force('y').strength(gs);
+  sim.force('charge').strength(n => -(big ? 18 : 30) - Math.min(140, (n.deg || 1) * (big ? 0.6 : 1.4)));
+  sim.force('link').links(S.visLinks).distance(l => (l.source.type === 'commitment' || l.target.type === 'commitment') ? 26 : 40)
+     .strength(l => 0.9 / Math.min(l.source._dv || 1, l.target._dv || 1));
+  sim.alphaDecay(big ? 0.045 : 0.035).velocityDecay(0.45);
+  const heat = (!prev.size || fresh > S.vis.length * 0.3) ? 1 : 0.45;
+  sim.alpha(heat);
+  updateStatus();
+  $('#gempty').hidden = S.vis.length > 0;
+  if (!S.vis.length) $('#gempty').textContent = 'Nothing matches these filters.';
+  if (!keepView) userMoved = false;
+  settle();
+}
+function updateStatus(){
+  const open = S.vis.filter(n => n.type === 'commitment' && n.open).length;
+  $('#gstatus').textContent = S.vis.length + ' notes · ' + S.visLinks.length + ' links' + (open ? ' · ' + open + ' open' : '');
+}
+let settleToken = 0;
+function settle(){
+  const tok = ++settleToken;
+  if (RM.matches){
+    // Reduced motion: lay out off-screen in chunks, paint once.
+    const chunk = () => {
+      if (tok !== settleToken) return;
+      const t0 = performance.now();
+      while (sim.alpha() > sim.alphaMin() && performance.now() - t0 < 30) sim.tick();
+      if (sim.alpha() > sim.alphaMin()) setTimeout(chunk, 0);
+      else { if (!userMoved) fit(false); requestDraw(); }
+    };
+    chunk(); return;
+  }
+  // Pre-settle most of the layout before the first paint, then animate the tail.
+  const t0 = performance.now();
+  while (sim.alpha() > 0.08 && performance.now() - t0 < 350) sim.tick();
+  if (!userMoved) fit(false);
+  requestDraw();
+  if (!running){ running = true; later(step); }
+}
+// Ticks run on a macrotask loop, painting is coalesced to rAF: a slow raster never slows the layout.
+const mc = new MessageChannel(), mq = [];
+mc.port1.onmessage = () => { const f = mq.shift(); if (f) f(); };
+function later(f){ mq.push(f); mc.port2.postMessage(0); }
+let lastSettleDraw = 0;
+function step(){
+  const t0 = performance.now();
+  do { sim.tick(); } while (sim.alpha() > sim.alphaMin() && performance.now() - t0 < 12);
+  if (!userMoved) fit(false);
+  // While settling, paint at most ~8x/s (dragging paints every frame) so layout gets the CPU.
+  const now = performance.now();
+  if (sim.alphaTarget() > 0 || now - lastSettleDraw > 120){ lastSettleDraw = now; requestDraw(); }
+  if (sim.alpha() > sim.alphaMin() || sim.alphaTarget() > 0) setTimeout(() => later(step), sim.alphaTarget() > 0 ? 8 : 0);
+  else { running = false; if (!userMoved) fit(false); requestDraw(); }
+}
+function fit(animate){
+  if (!S.vis.length) return;
+  // fit the 2nd..98th percentile so a few stray nodes don't shrink the whole graph
+  const xs = S.vis.map(n => n.x).sort((a, b) => a - b), ys = S.vis.map(n => n.y).sort((a, b) => a - b);
+  const q = S.vis.length > 60 ? Math.floor(S.vis.length * 0.02) : 0, e = xs.length - 1 - q;
+  const x0 = xs[q] - 10, x1 = xs[e] + 10, y0 = ys[q] - 10, y1 = ys[e] + 10;
+  const vb = viewBox(), pad = 28;
+  const k = Math.max(0.04, Math.min(2.2, Math.min((vb.w - pad * 2) / Math.max(1, x1 - x0), (vb.h - pad * 2) / Math.max(1, y1 - y0))));
+  const t = d3.zoomIdentity.translate(vb.x + vb.w / 2 - k * (x0 + x1) / 2, vb.y + vb.h / 2 - k * (y0 + y1) / 2).scale(k);
+  setT(t, animate);
+}
+function setT(t, animate){
+  if (animate && !RM.matches) sel.transition().duration(320).call(zoom.transform, t);
+  else sel.call(zoom.transform, t);
+}
+function centerOn(n, animate){
+  const vb = viewBox(), k = Math.max(T.k, 1.1);
+  setT(d3.zoomIdentity.translate(vb.x + vb.w / 2 - k * n.x, vb.y + vb.h / 2 - k * n.y).scale(k), animate);
+}
+function select(n){
+  S.sel = n; S.hl = new Set();
+  if (n){ S.hl.add(n.id); for (const m of S.adj.get(n.id) || []) S.hl.add(m); }
+  requestDraw();
+}
+// Make sure a node is in the graph (adds it + its visible links if filtered out).
+function ensureVisible(n){
+  if (S.visSet.has(n.id)) return Promise.resolve(false);
+  S.extra.add(n.id);
+  rebuild(true);
+  return new Promise(res => {
+    const wait = () => { if (!running) res(true); else setTimeout(wait, 60); };
+    RM.matches ? setTimeout(() => res(true), 0) : wait();
+  });
+}
+function focusNode(n, animate){
+  userMoved = true;
+  ensureVisible(n).then(() => { select(n); centerOn(n, animate); });
+}
+
+// pointer: drag nodes, pan/zoom elsewhere, tap to open
+sel.call(d3.drag().container(function(){ return this; })
+  .subject(e => { const n = hitTest(e.x, e.y); return n ? {n, x:T.applyX(n.x), y:T.applyY(n.y)} : null; })
+  .on('start', e => { cv.classList.add('drag'); userMoved = true; const n = e.subject.n; n.fx = n.x; n.fy = n.y;
+      if (!RM.matches){ sim.alphaTarget(0.12); if (!running){ running = true; sim.alpha(Math.max(sim.alpha(), 0.12)); later(step); } } })
+  .on('drag', e => { const n = e.subject.n; n.fx = T.invertX(e.x); n.fy = T.invertY(e.y); if (RM.matches){ n.x = n.fx; n.y = n.fy; requestDraw(); } })
+  .on('end', e => { cv.classList.remove('drag'); const n = e.subject.n; n.fx = null; n.fy = null; sim.alphaTarget(0); requestDraw(); }))
+ .call(zoom).on('dblclick.zoom', null);
+cv.addEventListener('click', e => {
+  const r = cv.getBoundingClientRect(), n = hitTest(e.clientX - r.left, e.clientY - r.top);
+  if (n){ select(n); openNote(n.id, {push:false, fresh:true}); }
+  else if (S.sel){ select(null); }
+});
+cv.addEventListener('pointermove', e => {
+  if (e.pointerType !== 'mouse' || e.buttons) return;
+  const r = cv.getBoundingClientRect(); cv.classList.toggle('pt', !!hitTest(e.clientX - r.left, e.clientY - r.top));
+});
+$('#zin').onclick = () => { userMoved = true; RM.matches ? zoom.scaleBy(sel, 1.5) : sel.transition().duration(200).call(zoom.scaleBy, 1.5); };
+$('#zout').onclick = () => { userMoved = true; RM.matches ? zoom.scaleBy(sel, 1/1.5) : sel.transition().duration(200).call(zoom.scaleBy, 1/1.5); };
+$('#zfit').onclick = () => { userMoved = true; fit(true); };
+
+// ---------- chips ----------
+function renderChips(){
+  const counts = {}; for (const t of TYPES) counts[t.key] = 0;
+  const openN = S.nodes.filter(n => n.type === 'commitment' && n.open).length;
+  for (const n of S.nodes) counts[keyOf(n)]++;
+  const disabledInOpen = new Set(['decision', 'rule', 'memory']);
+  let h = '<button class="chip mode" data-mode="open" aria-pressed="' + (S.mode === 'open') + '">Open items <span class="c">' + openN + '</span></button>' +
+          '<button class="chip mode" data-mode="all" aria-pressed="' + (S.mode === 'all') + '">Everything <span class="c">' + S.nodes.length + '</span></button><span class="sep"></span>';
+  for (const t of TYPES){
+    const dis = S.mode === 'open' && disabledInOpen.has(t.key);
+    h += '<button class="chip" data-type="' + t.key + '" aria-pressed="' + (S.types.has(t.key) && !dis) + '"' + (dis ? ' disabled title="Switch to Everything to show ' + t.label.toLowerCase() + '"' : '') +
+         '><span class="dot" style="background:var(--c-' + t.key + ')"></span>' + t.label + '</button>';
+  }
+  $('#chips').innerHTML = h;
+}
+$('#chips').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b || b.disabled) return;
+  if (b.dataset.mode){ if (S.mode === b.dataset.mode) return; S.mode = b.dataset.mode; store.set('brain.mode', S.mode); S.extra.clear(); }
+  else { const k = b.dataset.type; S.types.has(k) ? S.types.delete(k) : S.types.add(k); }
+  renderChips(); rebuild(false);
+});
+
+// ---------- search ----------
+const q = $('#q'), results = $('#results');
+let rIdx = -1, rItems = [];
+function doSearch(){
+  const s = q.value.trim().toLowerCase();
+  $('#searchbox').classList.toggle('has', !!q.value);
+  if (S.view === 'list'){ results.hidden = true; renderList(); return; }
+  if (!s){ results.hidden = true; return; }
+  rItems = S.nodes.filter(n => (n.title || '').toLowerCase().includes(s) || n.id.toLowerCase().includes(s))
+    .sort((a, b) => ((b.title || '').toLowerCase().startsWith(s) - (a.title || '').toLowerCase().startsWith(s)) || (b.deg - a.deg)).slice(0, 8);
+  rIdx = rItems.length ? 0 : -1;
+  results.innerHTML = rItems.length ? rItems.map((n, i) => '<button role="option" data-id="' + esc(n.id) + '" aria-selected="' + (i === rIdx) + '"><span class="dot" style="width:8px;height:8px;border-radius:50%;flex:none;background:' + cssColorOf(n) + '"></span><span class="t">' + esc(n.title || n.id) + '</span><span class="k">' + esc(n.type === 'commitment' ? (KIND_NAME[n.kind] || 'Item') : TYPE_NAME[n.type]) + '</span></button>').join('')
+    : '<div style="padding:12px;color:var(--muted);font-size:14px">No matches</div>';
+  results.hidden = false;
+}
+function pick(n){
+  results.hidden = true; q.blur();
+  if (S.view !== 'graph') setView('graph');
+  focusNode(n, true); openNote(n.id, {fresh:true});
+}
+q.addEventListener('input', doSearch);
+q.addEventListener('focus', () => { if (q.value && S.view === 'graph') doSearch(); });
+q.addEventListener('keydown', e => {
+  if (S.view !== 'graph') return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp'){ e.preventDefault(); if (!rItems.length) return; rIdx = (rIdx + (e.key === 'ArrowDown' ? 1 : -1) + rItems.length) % rItems.length;
+    results.querySelectorAll('button').forEach((b, i) => b.setAttribute('aria-selected', i === rIdx)); }
+  else if (e.key === 'Enter'){ if (rItems[rIdx]) pick(rItems[rIdx]); }
+  else if (e.key === 'Escape'){ results.hidden = true; q.blur(); }
+});
+results.addEventListener('pointerdown', e => e.preventDefault());
+results.addEventListener('click', e => { const b = e.target.closest('button[data-id]'); if (b) pick(S.byId.get(b.dataset.id)); });
+$('#qclear').addEventListener('click', e => { e.preventDefault(); q.value = ''; doSearch(); q.focus(); });
+document.addEventListener('pointerdown', e => { if (!e.target.closest('.searchrow')) results.hidden = true; });
+
+// ---------- views ----------
+function setView(v){
+  S.view = v; store.set('brain.view', v);
+  $('#v-graph').setAttribute('aria-pressed', v === 'graph'); $('#v-list').setAttribute('aria-pressed', v === 'list');
+  $('#graph').hidden = v !== 'graph'; $('#list').hidden = v !== 'list'; $('#chips').hidden = v !== 'graph';
+  q.placeholder = v === 'list' ? 'Filter open items' : 'Search notes';
+  results.hidden = true;
+  document.documentElement.style.setProperty('--hh', document.querySelector('header').offsetHeight + 'px');
+  if (v === 'graph'){ resize(); requestDraw(); } else renderList();
+}
+$('#v-graph').onclick = () => setView('graph');
+$('#v-list').onclick = () => setView('list');
+
+// ---------- open list ----------
+const DAY = 86400000;
+function todayUTC(){ const d = new Date(); return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()); }
+function parseDay(s){ if (!s) return null; const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; }
+const MON = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtDay(t){ const d = new Date(t); return MON[d.getUTCMonth()] + ' ' + d.getUTCDate(); }
+function fmtAmt(a){ if (a == null || a === '') return ''; const n = Number(String(a).replace(/[^0-9.\-]/g, '')); return isFinite(n) && String(a).match(/\d/) ? '$' + n.toLocaleString('en-US', {maximumFractionDigits: 2}) : esc(a); }
+function fmtAge(d){ if (d == null) return ''; return d < 1 ? 'today' : Math.round(d) + 'd old'; }
+function renderList(){
+  const el = $('#list'), items = S.openItems, now = todayUTC(), s = q.value.trim().toLowerCase();
+  const kinds = [['all', 'All'], ['ask', 'Asks'], ['waiting-on-owner', 'Waiting on me'], ['money', 'Money']];
+  const match = it => (S.listKind === 'all' || (S.listKind === 'money' ? (it.kind || '').startsWith('money') : it.kind === S.listKind)) &&
+    (!s || (it.title || '').toLowerCase().includes(s) || (it.id || '').toLowerCase().includes(s) || (it.owner || '').toLowerCase().includes(s) || (it.project || '').toLowerCase().includes(s));
+  const kc = k => items.filter(it => k === 'all' || (k === 'money' ? (it.kind || '').startsWith('money') : it.kind === k)).length;
+  const rows = items.filter(match).map(it => ({it, chase: parseDay(it.chase_after)}))
+    .sort((a, b) => (a.chase == null) - (b.chase == null) || (a.chase - b.chase) || ((b.it.age_days || 0) - (a.it.age_days || 0)));
+  const overdue = items.filter(it => { const c = parseDay(it.chase_after); return c != null && c < now; }).length;
+  const waiting = items.filter(it => it.kind === 'waiting-on-owner').length;
+  const money = items.filter(it => (it.kind || '').startsWith('money')).reduce((a, it) => a + (Number(it.amount) || 0), 0);
+  let h = '<div class="lwrap"><div class="summary">' +
+    '<div class="stat warm"><b>' + overdue + '</b><span>past chase date</span></div>' +
+    '<div class="stat"><b>' + waiting + '</b><span>waiting on you</span></div>' +
+    '<div class="stat"><b>' + items.length + '</b><span>open in total' + (money ? ' · ' + fmtAmt(money) + ' owed' : '') + '</span></div></div>' +
+    '<div class="lchips">' + kinds.map(([k, l]) => '<button class="chip mode" data-kind="' + k + '" aria-pressed="' + (S.listKind === k) + '">' + l + ' <span class="c">' + kc(k) + '</span></button>').join('') + '</div>';
+  const groups = [['Past chase date', r => r.chase != null && r.chase < now], ['Chase this week', r => r.chase != null && r.chase >= now && r.chase < now + 7 * DAY], ['Later', r => r.chase != null && r.chase >= now + 7 * DAY], ['No chase date', r => r.chase == null]];
+  let any = false;
+  for (const [name, f] of groups){
+    const g = rows.filter(f); if (!g.length) continue; any = true;
+    h += '<section class="group"><div class="gh">' + name + ' <span class="c">' + g.length + '</span></div><div class="rows">';
+    for (const {it, chase} of g){
+      const late = chase != null ? Math.round((now - chase) / DAY) : null;
+      const owner = !it.owner || it.owner === 'NONE' ? 'No owner' : it.owner;
+      const st = (it.status || '').toLowerCase();
+      h += '<button class="row k-' + esc(it.kind) + '" data-id="' + esc(it.id) + '"><span class="kb"></span><span class="main"><span class="title">' + esc(it.title) + '</span><span class="meta">' +
+        '<span class="pill kind">' + esc(KIND_NAME[it.kind] || it.kind || 'Item') + '</span>' + (st ? '<span class="pill s-' + esc(st) + '">' + esc(st) + '</span>' : '') +
+        '<span>' + esc(owner) + '</span>' + (it.age_days != null ? '<span>· ' + fmtAge(it.age_days) + '</span>' : '') + '</span></span>' +
+        '<span class="side">' + (chase != null ? '<span class="d">' + fmtDay(chase) + '</span><br>' + (late > 0 ? '<span class="late">' + late + 'd late</span>' : late === 0 ? '<span class="late">today</span>' : 'in ' + (-late) + 'd') : '<span>—</span>') +
+        (it.amount ? '<span class="amt">' + fmtAmt(it.amount) + '</span>' : '') + '</span></button>';
+    }
+    h += '</div></section>';
+  }
+  if (!any) h += '<div class="lempty">' + (items.length ? 'No open items match.' : 'Nothing open. Every ask is closed.') + '</div>';
+  h += '</div>';
+  const st = el.scrollTop; el.innerHTML = h; el.scrollTop = st;
+}
+$('#list').addEventListener('click', e => {
+  const k = e.target.closest('[data-kind]'); if (k){ S.listKind = k.dataset.kind; renderList(); return; }
+  const r = e.target.closest('.row'); if (r) openNote(r.dataset.id, {fresh:true});
+});
+
+// ---------- markdown ----------
+function inline(s){
+  s = esc(s);
+  const codes = [];
+  s = s.replace(/`([^`]+)`/g, (m, c) => { codes.push(c); return '\u0000' + (codes.length - 1) + '\u0000'; });
+  s = s.replace(/\[\[([^\]|]+?)(?:\|([^\]]+))?\]\]/g, (m, id, label) => {
+    const clean = id.split('#')[0].trim(), n = S.byId.get(clean);
+    const text = label || (n ? esc(n.title) : clean);
+    return '<a href="#' + encodeURIComponent(clean) + '" class="wl' + (n ? '' : ' missing') + '" data-id="' + clean + '">' + text + '</a>';
+  });
+  s = s.replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+  s = s.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>');
+  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/(^|[\s(])\*([^*\s][^*]*?)\*(?=[\s).,;:]|$)/g, '$1<em>$2</em>');
+  s = s.replace(/\u0000(\d+)\u0000/g, (m, i) => '<code>' + codes[+i] + '</code>');
+  return s;
+}
+function renderMarkdown(md, title){
+  md = (md || '').replace(/<!--[\s\S]*?-->/g, '').replace(/\r/g, '');
+  const lines = md.split('\n'); let out = '', list = null, para = [], droppedTitle = false, i = 0;
+  const flushP = () => { if (para.length){ out += '<p>' + para.map(inline).join('<br>') + '</p>'; para = []; } };
+  const closeList = () => { while (list && list.length){ out += '</' + list.pop().tag + '>'; } list = null; };
+  for (; i < lines.length; i++){
+    const raw = lines[i], line = raw.trimEnd();
+    if (!line.trim()){ flushP(); closeList(); continue; }
+    let m;
+    if ((m = /^(#{1,4})\s+(.*)$/.exec(line))){
+      flushP(); closeList();
+      if (!droppedTitle && m[1].length === 1 && (!title || m[2].trim() === title.trim() || out === '')){ droppedTitle = true; continue; }
+      const lv = Math.min(4, Math.max(2, m[1].length + (m[1].length === 1 ? 1 : 0)));
+      out += '<h' + lv + '>' + inline(m[2]) + '</h' + lv + '>'; continue;
+    }
+    if ((m = /^(\s*)([-*+]|\d+[.)])\s+(.*)$/.exec(line))){
+      flushP();
+      const depth = Math.floor(m[1].replace(/\t/g, '  ').length / 2), tag = /\d/.test(m[2]) ? 'ol' : 'ul';
+      if (!list) list = [];
+      while (list.length > depth + 1) out += '</' + list.pop().tag + '>';
+      while (list.length < depth + 1){ out += '<' + tag + '>'; list.push({tag}); }
+      let item = m[3].replace(/^\[( |x)\]\s+/i, (mm, c) => c.trim() ? '[done] ' : '');
+      out += '<li>' + inline(item) + '</li>'; continue;
+    }
+    if (/^\s*\|/.test(line)){
+      flushP(); closeList();
+      const rows = []; while (i < lines.length && /^\s*\|/.test(lines[i])){ rows.push(lines[i].trim()); i++; } i--;
+      const cells = r => r.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+      let t = '<div class="tw"><table>';
+      rows.forEach((r, ri) => { if (/^\|?\s*:?-{2,}/.test(r)) return; const tg = ri === 0 ? 'th' : 'td'; t += '<tr>' + cells(r).map(c => '<' + tg + '>' + inline(c) + '</' + tg + '>').join('') + '</tr>'; });
+      out += t + '</table></div>'; continue;
+    }
+    if ((m = /^>\s?(.*)$/.exec(line))){ flushP(); closeList(); out += '<blockquote>' + inline(m[1]) + '</blockquote>'; continue; }
+    if (/^(-{3,}|\*{3,})$/.test(line.trim())){ flushP(); closeList(); continue; }
+    closeList(); para.push(line.trim());
+  }
+  flushP(); closeList();
+  return out;
+}
+
+// ---------- note panel ----------
+const panel = $('#panel'), pbody = $('#pbody');
+let noteReq = 0;
+async function openNote(id, opt){
+  opt = opt || {};
+  if (S.open && S.open !== id && !opt.fromBack) S.history.push(S.open);
+  if (opt.fresh && panel.hidden) S.history = [];
+  S.open = id;
+  $('#pback').disabled = !S.history.length;
+  const n = S.byId.get(id);
+  panel.hidden = false;
+  $('#pcrumb').textContent = n ? (n.type === 'commitment' ? (KIND_NAME[n.kind] || 'Commitment') : TYPE_NAME[n.type] || '') : '';
+  $('#plocate').hidden = !n;
+  pbody.innerHTML = head(n, id) + '<div class="loading">Loading…</div>';
+  pbody.scrollTop = 0;
+  try { history.replaceState(null, '', '#' + encodeURIComponent(id)); } catch (e) {}
+  const my = ++noteReq;
+  try {
+    const r = await fetch(BASE + 'note?id=' + encodeURIComponent(id));
+    if (my !== noteReq) return;
+    if (!r.ok) throw new Error(r.status === 404 ? 'This note does not exist (yet).' : 'Could not load note (' + r.status + ').');
+    const d = await r.json(); if (my !== noteReq) return;
+    pbody.innerHTML = head(n, id, d) + facts(d.frontmatter || {}) + '<div class="md">' + renderMarkdown(d.markdown, (d.frontmatter || {}).title || (n && n.title)) + '</div>' + backlinks(d.backlinks || [], id);
+  } catch (e){
+    if (my !== noteReq) return;
+    pbody.innerHTML = head(n, id) + '<div class="loading">' + esc(e.message || 'Could not load note.') + '</div>';
+  }
+  if (S.view === 'graph' && n && !opt.noCenter){
+    if (S.visSet.has(n.id)){ select(n); centerOn(n, true); }
+    else focusNode(n, true);
+  }
+}
+function head(n, id, d){
+  const fm = (d && d.frontmatter) || {}, title = fm.title || (n && n.title) || id;
+  const t = n ? (n.type === 'commitment' ? (KIND_NAME[n.kind] || 'Commitment') + (n.open === false ? ' · closed' : '') : TYPE_NAME[n.type]) : 'Note';
+  return '<div class="ntype"><span class="dot" style="background:' + (n ? cssColorOf(n) : 'var(--c-memory)') + '"></span>' + esc(t) + '</div><div class="ntitle">' + esc(title) + '</div>';
+}
+function facts(fm){
+  const rows = [];
+  const strip = v => String(v).replace(/\[\[([^\]|]+)(?:\|([^\]]+))?\]\]/g, (m, a, b) => b || (S.byId.get(a) ? S.byId.get(a).title : a));
+  const add = (k, v, raw) => { if (v == null || v === '' || (Array.isArray(v) && !v.length)) return; rows.push('<dt>' + k + '</dt><dd>' + (raw ? v : esc(Array.isArray(v) ? v.map(strip).join(', ') : strip(v))) + '</dd>'); };
+  if (fm.type === 'commitment'){
+    add('Status', (fm.status || '') + (fm.open === false ? ' (closed)' : ''));
+    add('Owner', fm.owner === 'NONE' ? 'No owner' : fm.owner); add('Owed to', fm.owed_to);
+    if (fm.amount) add('Amount', fmtAmt(fm.amount), true);
+    const c = parseDay(fm.chase_after); if (c != null){ const late = Math.round((todayUTC() - c) / DAY); add('Chase', fmtDay(c) + (late > 0 ? ' <span style="color:var(--warm);font-weight:600">· ' + late + 'd late</span>' : ''), true); }
+    const a = parseDay(fm.asked_on); if (a != null) add('Asked', fmtDay(a));
+  } else if (fm.type === 'project' || fm.type === 'person'){
+    add('Status', fm.status); add('Open items', fm.open_items);
+    const l = parseDay(fm.last_seen); if (l != null) add('Last seen', fmtDay(l));
+  } else return '';
+  return rows.length ? '<dl class="facts">' + rows.join('') + '</dl>' : '';
+}
+function blItem(id){
+  const n = S.byId.get(id);
+  return '<button class="item" data-id="' + esc(id) + '"><span class="dot" style="background:' + (n ? cssColorOf(n) : 'var(--c-memory)') + '"></span><span class="t">' + esc(n ? n.title : id) + '</span></button>';
+}
+function backlinks(ids, self){
+  ids = ids.filter(x => x !== self);
+  if (!ids.length) return '<div class="bl"><h2>Backlinks</h2><div style="color:var(--faint);font-size:14px">None</div></div>';
+  // open commitments first, then hubs, then by degree
+  const rank = id => { const n = S.byId.get(id); if (!n) return 0; return (n.type === 'commitment' && n.open ? 3e3 : 0) + (n.type === 'project' || n.type === 'person' ? 2e3 : 0) + (n.deg || 0); };
+  ids = ids.slice().sort((a, b) => rank(b) - rank(a));
+  const first = ids.slice(0, 25), rest = ids.slice(25);
+  return '<div class="bl"><h2>Backlinks · ' + ids.length + '</h2>' + first.map(blItem).join('') +
+    (rest.length ? '<div class="blrest" hidden>' + rest.map(blItem).join('') + '</div><button class="more">Show ' + rest.length + ' more</button>' : '') + '</div>';
+}
+pbody.addEventListener('click', e => {
+  const m = e.target.closest('.more'); if (m){ m.previousElementSibling.hidden = false; m.remove(); return; }
+  const b = e.target.closest('[data-id]'); if (b){ e.preventDefault(); openNote(b.dataset.id); }
+});
+function closePanel(){
+  panel.hidden = true; S.open = null; S.history = [];
+  try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+  select(null);
+}
+$('#pclose').onclick = closePanel;
+$('#pback').onclick = () => { const id = S.history.pop(); if (id) openNote(id, {fromBack:true}); };
+$('#plocate').onclick = () => { const n = S.byId.get(S.open); if (!n) return; if (S.view !== 'graph') setView('graph'); focusNode(n, true); };
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden && document.activeElement !== q) closePanel(); });
+
+// ---------- boot ----------
+async function boot(){
+  readTheme();
+  const mq = matchMedia('(prefers-color-scheme: dark)');
+  (mq.addEventListener ? mq.addEventListener.bind(mq, 'change') : mq.addListener.bind(mq))(() => { readTheme(); requestDraw(); });
+  const setHH = () => document.documentElement.style.setProperty('--hh', document.querySelector('header').offsetHeight + 'px');
+  setHH();
+  window.addEventListener('resize', () => { setHH(); if (S.view === 'graph') resize(); });
+  let g;
+  try {
+    const [gr, orr] = await Promise.all([fetch(BASE + 'graph.json'), fetch(BASE + 'open?limit=300')]);
+    if (!gr.ok) throw new Error('graph.json ' + gr.status);
+    g = await gr.json();
+    if (orr.ok){ const o = await orr.json(); S.openItems = o.items || []; $('#opencount').textContent = o.count != null ? o.count : S.openItems.length; }
+  } catch (e){
+    $('#gempty').hidden = false; $('#gempty').textContent = 'Could not load the brain: ' + (e.message || e);
+    return;
+  }
+  if (g.built) $('#built').textContent = 'built ' + String(g.built).replace('T', ' ');
+  S.nodes = g.nodes || [];
+  for (const n of S.nodes){ n.deg = n.deg || 0; n._r = radius(n); S.byId.set(n.id, n); S.adj.set(n.id, []); }
+  const seen = new Set();
+  for (const [a, b] of g.links || []){
+    if (!S.byId.has(a) || !S.byId.has(b) || a === b) continue;
+    const key = a < b ? a + '\u0001' + b : b + '\u0001' + a; if (seen.has(key)) continue; seen.add(key);
+    S.links.push([a, b]); S.adj.get(a).push(b); S.adj.get(b).push(a);
+  }
+  renderChips();
+  const v = store.get('brain.view') === 'list' ? 'list' : 'graph';
+  setView(v); resize();
+  rebuild(false);
+  const h = decodeURIComponent((location.hash || '').slice(1));
+  if (h && S.byId.has(h)) openNote(h, {fresh:true});
+}
+boot();
+})();
+</script>
+</body>
+</html>

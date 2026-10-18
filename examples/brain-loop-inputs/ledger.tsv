@@ -1,0 +1,5 @@
+id	added	direction	who	what	amount	due	status	project	note
+L1	2026-10-14	in	Lee Placeholder	Harbor Cafe deposit	150	2026-10-20	open	harbor-cafe	invoice not sent yet
+L2	2026-10-01	in	Dana Example	Acme site phase 1	1200	2026-10-10	overdue	acme-site	phase 1 delivered 2026-10-09
+L3	2026-10-05	out	Sam Sample	Beta app screenshots	80		open	beta-app	pay on delivery
+L4	2026-09-20	in	Dana Example	Acme site deposit	400	2026-09-25	paid	acme-site	

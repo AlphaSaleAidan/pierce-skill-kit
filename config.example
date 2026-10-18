@@ -50,6 +50,25 @@ LK_HEAVY_NICE=15
 # RAM guard: heavy jobs wait while free memory is below this (MB).
 LK_MIN_FREE_MB=4096
 
+# --- brain-loop mod only (mods/brain-loop). Every path defaults under LK_HOME; leave a line out to keep the default. ---
+# The Obsidian-compatible vault it writes (open this folder in Obsidian, or run: brain-loop page).
+BRAIN_VAULT="$LK_HOME/brain"
+# Projects and people to link notes to (copy examples/brain-loop-inputs/entities.json and edit it).
+BRAIN_ENTITIES="$LK_HOME/brain-entities.json"
+# Where plan files live (tab-plan skill): $BRAIN_PLANS/<project>/MMDD-<task>.md
+BRAIN_PLANS="$LK_HOME/plans"
+# Colon-separated Claude memory folders to turn into notes (feedback files become rules). Empty = none.
+BRAIN_MEMORY_DIRS=''
+# Optional money ledger TSV: id added direction(in|out) who what amount due status project note. Empty = no money notes.
+BRAIN_LEDGER=''
+# Router + plan-grade state, logs, the OFF switch and the Jev spend log.
+BRAIN_ROUTER_DIR="$LK_HOME/brain-loop"
+# Jev for the router (--engine jev|hybrid) and plan-grade: closed until you set a monthly dollar cap here.
+# Uses LK_CHECK_KEY_FILE + LK_CHECK_MODEL above. Measured about $0.00004 a report.
+BRAIN_JEV_CAP_USD=0
+# What notes call the human (default: owner).
+BRAIN_OWNER=owner
+
 # --- macOS helpers only (bin/macos). Leave empty if you don't use a Mac terminal. ---
 # How the server reaches your Mac (usually a reverse SSH tunnel you opened from the Mac).
 LK_MAC_SSH=''            # e.g. 'ssh -p 2222 -o BatchMode=yes -o ConnectTimeout=6 me@localhost'

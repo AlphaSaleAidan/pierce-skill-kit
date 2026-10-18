@@ -1,0 +1,46 @@
+#!/bin/sh
+# stuck-check (brain-loop stuck) - the two things tab-watch and tab-sweep don't cover. Run it every 15-20 min
+# (cron line in mods/brain-loop/README.md). Each alert goes to the lead once.
+#  1. A project whose LATEST report is needs-human / blocked / failed and is older than BRAIN_STUCK_MIN (20) minutes
+#     is raised again, so nothing waits on the human without the human hearing it.
+#  2. An unchecked plan checkpoint past its due time in an ACTIVE plan ("- [ ] CP2 due 2026-10-18T14:00 | ...").
+# Idle tabs are tab-watch's job; closing finished tabs is tab-sweep's; old orders show in lead-round / lead-daily.
+# shellcheck disable=SC1090  # lk-config is found at run time
+here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+for c in "$here/../../../bin/lk-config" "$HOME/.local/bin/lk-config"; do [ -f "$c" ] && { . "$c"; break; }; done
+: "${LK_HOME:=$HOME/.pierce-skill-kit}" "${LK_LEAD:=hub:Lead}" "${BRAIN_REPORTS:=$LK_HOME/reports.tsv}"
+: "${BRAIN_PLANS:=$LK_HOME/plans}" "${BRAIN_STUCK_MIN:=20}"
+seen=$LK_HOME/stuck-check.seen; mkdir -p "$LK_HOME"; touch "$seen"
+now=$(date -u +%s)
+say() { # BRAIN_SAY if set, else type it into the lead like tab-watch does
+  # shellcheck disable=SC2086  # BRAIN_SAY may carry its own args
+  if [ -n "$BRAIN_SAY" ]; then $BRAIN_SAY "$1"
+  else tmux send-keys -t "$LK_LEAD" -l "$1" && sleep 0.5 && tmux send-keys -t "$LK_LEAD" Enter; fi; }
+epoch() { # 2026-10-18T14:00Z / 2026-10-18T14:00 / 10-18T14:00 -> seconds (UTC)
+  t=${1%Z}; case $t in [0-9][0-9]-[0-9][0-9]T[0-9]*) t="$(date -u +%Y)-$t";; [0-9][0-9][0-9][0-9]-*T[0-9]*) ;; *) return 1;; esac
+  date -u -d "$(echo "$t" | tr T ' ')" +%s 2>/dev/null; }
+once() { grep -qxF "$1" "$seen" && return 1; echo "$1" >> "$seen"; }
+
+# 1. stuck reports: the latest report per project
+if [ -f "$BRAIN_REPORTS" ]; then
+  tail -n +2 "$BRAIN_REPORTS" | tail -n 500 | awk -F'\t' '{last[$2]=$0} END{for (p in last) print last[p]}' |
+  while IFS="$(printf '\t')" read -r t proj st msg _; do
+    case $st in needs-human|blocked|failed) ;; *) continue;; esac
+    ts=$(epoch "$t") || continue
+    [ $((now - ts)) -gt $((BRAIN_STUCK_MIN * 60)) ] || continue
+    once "report|$t|$proj" || continue
+    say "[STUCK >${BRAIN_STUCK_MIN} min] $proj is $st since $t: $(printf '%s' "$msg" | cut -c1-300). Tell the human now or unblock it."
+  done
+fi
+
+# 2. overdue checkpoints in ACTIVE plans
+for f in "$BRAIN_PLANS"/*/*.md; do
+  [ -f "$f" ] || continue; grep -q '^Status: ACTIVE' "$f" || continue
+  grep -o '^- \[ \] CP[0-9]* due [0-9T:-]*' "$f" | while read -r _ _ _ cp _ due; do
+    ts=$(epoch "$due") || continue
+    [ "$now" -gt "$ts" ] || continue
+    once "cp|$f|$cp" || continue
+    say "[CHECKPOINT OVERDUE] $cp (due $due UTC) in $f. Check the tab now: tick it with proof, or chase/escalate, and log it in the plan."
+  done
+done
+exit 0
