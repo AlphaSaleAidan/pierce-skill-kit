@@ -1,0 +1,6 @@
+id	opened	project	tab	status	ask	note
+1	2026-10-10T09:00Z	acme-site	acme-site	open	Checkout page on acme-site takes card payments in test mode	
+2	2026-10-10T09:05Z	acme-site	acme-site	open	Send Dana the staging link once checkout works	
+3	2026-10-11T14:00Z	beta-app	beta-app	waiting	Beta app store listing with screenshots from Sam	2026-10-12T10:00Z waiting on the screenshots
+4	2026-10-12T08:30Z	harbor-cafe	harbor-cafe	open	Harbor Cafe menu page with prices	
+5	2026-10-08T16:00Z	acme-site	acme-site	done	Acme site logo swap	2026-10-09T11:00Z proof: commit 4e5f6a7

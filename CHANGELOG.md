@@ -3,6 +3,34 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.4.2 (2026-10-18)
+**Run this** if you already installed: `lead update`. To try the new loop: `mods/install.sh brain-loop`, then follow
+[the README section](README.md#obsidian--opus--jev-loop).
+
+### Added
+- **brain-loop mod: the Obsidian + Opus + Jev loop** (plan, act, observe, improve). `brain-loop build` turns your
+  orders, reports, decisions, plans, Claude memory files and an optional money ledger into an Obsidian-compatible
+  vault: one note per project, person, ask, decision, plan and rule, linked both ways, open asks sorted by when to
+  chase them. Text you write below the marker and `my_*` fields survive every rebuild. MCP tools `brain`,
+  `brain_open`, `brain_mark` (stdio, no daemon), a read-only graph page (`brain-loop page`), and a SessionStart
+  hook that gives the lead its top 15 open items and a tab its project's open items.
+- **Report router** (`brain-loop route`): triages each new report (needs the owner, blocked, done and proven,
+  what's next, urgency, which plan and order). Confident answers are written (a Progress log line, the order marked
+  in the brain, a note on the order); unsure ones go to the lead in one message per run. Rules engine by default;
+  Jev or hybrid behind a monthly spend cap you set. OFF switch, dry run, shadow mode, scoring against your own
+  labels. On one operator's data the hybrid router matched independent labels 82-100% on six fields (urgency 55%,
+  never acts alone).
+- **Plan grading** (`brain-loop grade`): did the tab follow each numbered direction? Jev answers, a headless
+  Sonnet check decides the ones Jev isn't sure of; scores go into the plan and `compliance.tsv`, the most-missed
+  directions into a weekly rule note.
+- **stuck-check** (`brain-loop stuck`): re-raises a report left waiting on the owner for 20+ minutes and each
+  overdue plan checkpoint, once each. Idle and finished tabs stay with `tab-watch` and `tab-sweep`.
+- **`tab-plan` skill** (23 skills): one plan file per task with numbered directions, timed checkpoints and the
+  owner's decisions; the lead follows it too. `brain-loop plan-new <project> <task>` starts one.
+- `examples/brain-vault`: a small vault built by the builder itself from made-up inputs in
+  `examples/brain-loop-inputs`; the test rebuilds it and checks it matches.
+- `tests/brain-loop-test.sh` (in a container, no network: a fake local Jev and a stub Claude) and its CI step.
+
 ## v0.4.1 (2026-10-17)
 **Run this** if you already installed: `lead update`, then close every terminal showing the lead and run `lead`
 again. On your Mac or Linux computer (not the server), once:

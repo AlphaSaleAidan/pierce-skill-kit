@@ -14,6 +14,7 @@ _Lead model: Opus._
 |---|---|---|---|
 | `terminal-lead` | How the lead session runs tabs, briefs, orders and reports | Every lead monitor round | this kit, tmux |
 | `project-tab` | How a project tab plans, uses subagents, proves work and reports | Start of every brief | this kit |
+| `tab-plan` | One plan file per task (numbered directions, timed checkpoints, owner decisions); the lead follows it, the router logs into it, `brain-loop grade` scores it | Before any instruction to a tab, and every follow-up | this kit; the brain-loop mod for logging, checkpoint alerts and grading |
 | `codex` | Hands a build, fix round or adversarial review to a Codex model; Claude keeps the brief, secrets and verification | Big builds, mechanical grinds, second-model review of money-path diffs | Codex CLI + an OpenAI account |
 
 ## Quality & grading

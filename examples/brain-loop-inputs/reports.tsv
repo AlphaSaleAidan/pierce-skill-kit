@@ -1,0 +1,8 @@
+time_utc	project	status	message	proof	tab
+2026-10-09T11:00Z	acme-site	done	logo swapped on acme-site, commit 4e5f6a7 (order #5). NEXT: start checkout	https://staging.example.com/	acme-site
+2026-10-13T10:20Z	acme-site	progress	checkout form built, card fields render in test mode. NEXT: wire the confirmation email		acme-site
+2026-10-13T15:40Z	beta-app	blocked	store listing blocked: waiting on Sam for the 6.7in screenshots. NEXT: draft the listing text meanwhile		beta-app
+2026-10-14T09:10Z	acme-site	needs-human	checkout works in test mode (row 1). OK to send Dana the staging link? NEXT: send it once you say yes	https://staging.example.com/checkout	acme-site
+2026-10-14T13:00Z	harbor-cafe	progress	menu page drafted with 14 items, prices from the sheet Lee sent. NEXT: photos		harbor-cafe
+2026-10-14T17:30Z	harbor-cafe	needs-human	Lee asked for a $150 deposit invoice before launch; which option: card link or bank transfer?		harbor-cafe
+2026-10-15T08:00Z	beta-app	progress	pinged Sam again about the screenshots		beta-app

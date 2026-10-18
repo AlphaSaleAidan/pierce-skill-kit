@@ -18,7 +18,7 @@
   <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
 
-> **Latest (v0.4.0):** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
+> **Latest (v0.4.2):** the brain-loop mod (Obsidian + Opus + Jev loop: a linked vault, report triage, plan grading, MCP tools) and the `tab-plan` skill. **v0.4.0:** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
 > **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -77,7 +77,7 @@ Needs Linux, `tmux`, `flock` (util-linux) and [Claude Code](https://docs.claude.
 git clone https://github.com/AlphaSaleAidan/pierce-skill-kit && cd pierce-skill-kit && ./install.sh
 ```
 It puts the tools in `~/.local/bin`, the two lead/tab skills in `~/.claude/skills`, a config at
-`~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the other 22 skills, daily skill routing, the tmux settings,
+`~/.config/pierce-skill-kit/config`, then **asks** before each optional step: the other 23 skills, daily skill routing, the tmux settings,
 appending the rules to your `~/.claude/CLAUDE.md`, the watchdog cron, the macOS helpers, the daily auto-update, the
 Claude Code mods and the extras. `--yes` (all) / `--no` (none) / `--defaults` (all but the macOS helpers,
 auto-update and extras; what `get.sh` uses) skip the questions.
@@ -113,7 +113,7 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `skill-route-sync [--confirm name] [--dry-run]` / `skill-add <owner/repo>` | route every installed skill in your skill router; install skills and route them |
 
 ## Skills
-Beyond the two lead/tab skills, 22 skills we wrote ourselves, grouped and indexed in [SKILLS.md](SKILLS.md):
+Beyond the two lead/tab skills, 23 skills we wrote ourselves, grouped and indexed in [SKILLS.md](SKILLS.md):
 quality and grading (video QC, lip-sync/gaze QC, phone-agent QA), video and 3D production (commercial pipeline,
 Blender sets from storyboards, green-screen comps, kinetic type, beat-synced overlays, logo fixes, voice conversion
 with consent, putting a consenting person into your own footage), design and web (site build), decks and same-day
@@ -127,8 +127,52 @@ Claude Code plugins and hooks that go with it, one command each ([mods/README.md
 (live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
 projects, sessions, PRs, services), **statusline**, **bridge** (Claude Code on your own computer talks to the lead
 over SSH: [docs/bridge.md](docs/bridge.md)), **skill-recommender** (asks "Switch to `<skill>`?" when an installed
-skill fits a tough task better), the **lead-guard**, **review-gate** and **mail-no-links** hooks, and
-`mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping Rope, the usage MCP, Ruflo + overlay).
+skill fits a tough task better), **brain-loop** (the loop below), the **lead-guard**, **review-gate** and
+**mail-no-links** hooks, and `mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping
+Rope, the usage MCP, Ruflo + overlay).
+
+## Obsidian + Opus + Jev loop
+An optional mod (`mods/brain-loop`) that closes the loop around the lead: **plan → act → observe → improve**.
+- **Plan:** the lead writes one plan file per task (`tab-plan` skill): numbered directions, timed checkpoints,
+  the owner's decisions. The tab gets only a pointer to it.
+- **Act:** Opus runs the lead and the tabs, as before.
+- **Observe:** every report is triaged by a small router: does it need the owner, is the tab blocked, is a "done"
+  actually proven, does it say what's next, which plan and which order does it belong to. Confident answers are
+  written for you (a Progress log line in the plan, the order marked in the brain); unsure ones reach the lead in
+  one batched message. `stuck-check` re-raises reports left waiting on the owner and overdue checkpoints.
+- **Improve:** at close, `brain-loop grade` scores how well the tab followed each direction; the most-missed ones
+  become a rule note.
+- **Memory:** everything lands in a vault: an Obsidian-compatible folder with one note per project, person, ask,
+  decision, plan and rule, linked both ways. Open asks are sorted by when to chase them. Your own edits (text below
+  the marker, `my_*` fields) survive every rebuild. Claude reads it through three MCP tools (`brain`, `brain_open`,
+  `brain_mark`), and the lead gets the top 15 open items at the start of every session.
+- **Jev** (a small decision model on OpenRouter) is the cheap triage step. It's off until you set a monthly cap.
+
+Setup (needs python3; nothing to pip install):
+```sh
+mods/install.sh brain-loop                     # the brain-loop command + the SessionStart hook
+cp examples/brain-loop-inputs/entities.json ~/.pierce-skill-kit/brain-entities.json   # then list your projects/people
+brain-loop build && brain-loop open            # write the vault, show open items
+claude mcp add -s user brain -- ~/.local/bin/brain-loop mcp
+brain-loop page                                # graph view at http://127.0.0.1:8790/brain/
+```
+Then cron `brain-loop build`, `brain-loop route run --apply` and `brain-loop stuck` every 15 minutes. Every path is in
+the config (`BRAIN_*` in [config.example](config.example)). A small vault built from made-up data is in
+[examples/brain-vault](examples/brain-vault). Details: [mods/brain-loop/README.md](mods/brain-loop/README.md).
+
+**Cost:** the rules engine is free and the default. Jev is about $0.00004 per report call (measured); `hybrid`
+makes one call per report, plan-grade one per direction plus a headless Sonnet check for the unsure ones.
+
+**How well it works.** These numbers come from one operator's own data, not a benchmark:
+- Brain vs plain search: 18/20 questions answered correctly with the vault vs 9/20 with plain text search
+  (20 questions; a blind answerer, then a separate strict grader).
+- Router (`hybrid`) on 40 held-out reports vs labels made independently: needs the owner 90%, blocked 92%, done and
+  proven 90%, right plan 100%, right order rows 85%, says what's next 82%, urgency 55%. Urgency never acts on
+  its own.
+- Jev alone was weaker (72 / 55 / 88 / 70% on the fields it was scored on), but every answer it gave with 0.9+
+  confidence on the 60-report tuning set was right. So `hybrid` lets Jev win a field only when it's that sure,
+  and sends disagreements to the lead.
+- Plan-grade: Jev was confident on only about 30% of directions; a Sonnet check decides the rest.
 
 ## Docs
 - [RULES.md](RULES.md): the rules sheet (paste-ready: [templates/CLAUDE.md](templates/CLAUDE.md))

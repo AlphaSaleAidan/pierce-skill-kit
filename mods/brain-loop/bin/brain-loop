@@ -1,0 +1,17 @@
+#!/bin/sh
+# brain-loop - the Obsidian + Opus + Jev loop (vault, report router, plan grading, MCP server, /brain page).
+# Loads the kit config (lk-config, $LK_CONFIG) and runs the python package next to this script. `brain-loop help`.
+# shellcheck disable=SC1090  # lk-config is found at run time
+here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+for c in "$here/../../../bin/lk-config" "$HOME/.local/bin/lk-config"; do [ -f "$c" ] && { . "$c"; break; }; done
+: "${LK_HOME:=$HOME/.pierce-skill-kit}" "${LK_LEAD_DIR:=$HOME/lead}" "${LK_CLAUDE:=claude}"
+: "${BRAIN_VAULT:=$LK_HOME/brain}" "${BRAIN_REPORTS:=$LK_HOME/reports.tsv}" "${BRAIN_ORDERS:=$LK_HOME/orders.tsv}"
+: "${BRAIN_DECISIONS:=$LK_HOME/decisions.md}" "${BRAIN_PLANS:=$LK_HOME/plans}" "${BRAIN_ENTITIES:=$LK_HOME/brain-entities.json}"
+: "${BRAIN_ROUTER_DIR:=$LK_HOME/brain-loop}" "${BRAIN_COMPLIANCE:=$LK_HOME/compliance.tsv}"
+export LK_HOME LK_LEAD LK_LEAD_DIR LK_CLAUDE LK_CHECK_MODEL LK_CHECK_KEY_FILE BRAIN_VAULT BRAIN_REPORTS BRAIN_ORDERS \
+  BRAIN_DECISIONS BRAIN_PLANS BRAIN_ENTITIES BRAIN_LEDGER BRAIN_MEMORY_DIRS BRAIN_ROUTER_DIR BRAIN_COMPLIANCE \
+  BRAIN_SOURCE_ROOT BRAIN_OWNER BRAIN_SAY BRAIN_JEV_CAP_USD BRAIN_JEV_DAY_ALERT_USD BRAIN_GRADE_MODEL BRAIN_NOW \
+  BRAIN_JEV_URL BRAIN_PLAN_TEMPLATE
+[ "$1" = stuck ] && { shift; exec sh "$here/stuck-check" "$@"; }
+command -v python3 >/dev/null || { echo "brain-loop needs python3" >&2; exit 1; }
+PYTHONPATH="$here/..${PYTHONPATH:+:$PYTHONPATH}" exec python3 -m brainloop "$@"

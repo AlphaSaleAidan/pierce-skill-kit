@@ -1,0 +1,16 @@
+{
+  "projects": {
+    "acme-site": {"title": "Acme site", "aliases": ["acme", "acme-site", "acme.example.com"]},
+    "beta-app": {"title": "Beta app", "aliases": ["beta-app", "beta app", "beta.example.com"]},
+    "harbor-cafe": {"title": "Harbor Cafe", "aliases": ["harbor cafe", "harbor-cafe"]}
+  },
+  "people": {
+    "dana-example": {"title": "Dana Example", "aliases": ["dana", "dana example"], "emails": ["dana@example.com"],
+                     "role": "client contact at Acme (approves copy)"},
+    "sam-sample": {"title": "Sam Sample", "aliases": ["Sam", "sam sample"], "emails": ["sam@example.com"],
+                   "role": "freelance designer"},
+    "lee-placeholder": {"title": "Lee Placeholder", "aliases": ["Lee", "lee placeholder"], "emails": ["lee@example.com"],
+                        "role": "Harbor Cafe owner", "kind": "client"}
+  },
+  "case_sensitive": {"Sam": [], "Lee": []}
+}

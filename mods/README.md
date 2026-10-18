@@ -12,6 +12,7 @@ The Claude Code mods that run alongside the lead + tabs setup. Each installs wit
 | **statusline** | Folder, git branch + uncommitted count, model and config folder; plus hub counts and an overload warning when projects-hub / agent-board are installed. Cached 30 s so many tabs stay cheap. | `mods/install.sh statusline` |
 | **skill-recommender** | On a substantial prompt, or when a task fails twice, Claude asks you once: "Switch to `<skill>`?" for an installed skill that fits better. Local keyword match over the skill index, no API; quiet on short replies; logs answers for tuning. [README](skill-recommender/README.md) | `mods/install.sh skill-recommender` |
 | **bridge** | Your local Claude Code talks to the server's lead over SSH: `bridge send` / `inbox` / `sync`, an MCP server (send_to_lead, read_inbox, share_context, pull_context), a shared context folder that never syncs secrets, optional locked-down key. [docs/bridge.md](../docs/bridge.md) | `sh mods/bridge/bridge setup me@my-server` (Windows: `bridge.ps1 setup`) |
+| **brain-loop** | The Obsidian + Opus + Jev loop: a linked vault of projects, people, asks, decisions and plans (Obsidian-compatible, your edits survive rebuilds), report triage that writes the confident answers into plans and asks the lead about the rest, plan compliance grading, stuck-report and overdue-checkpoint alerts, MCP tools (`brain`, `brain_open`, `brain_mark`), a /brain graph page and a SessionStart hook. Needs python3; Jev optional and capped. [README](brain-loop/README.md) | `mods/install.sh brain-loop` |
 | **lead-guard** hook | Stops the lead doing project work with its own subagents (READ-ONLY research allowed). Needs the kit's core install. | `mods/install.sh hook lead-guard` |
 | **review-gate** hook | Blocks `pm2`/`systemctl` `restart`/`reload` of apps you list until a recent independent review is recorded. | `mods/install.sh hook review-gate` |
 | **mail-no-links** hook | Refuses mail sends/drafts with links through a connector that rewrites links. Give it your mail tool names. | `mods/install.sh hook mail-no-links 'mcp__mail__send_message\|mcp__mail__create_draft'` |
@@ -33,6 +34,7 @@ The Claude Code mods that run alongside the lead + tabs setup. Each installs wit
 | `STATUSLINE_EXTRA` | statusline: a command whose output joins line 1 | none |
 | `REVIEW_GATED` | review-gate: regex of app names to guard (unset = off) | none |
 | `REVIEW_RESTART`, `REVIEW_MARKERS`, `REVIEW_MAX_AGE_MIN` | review-gate | `(pm2\|systemctl) +(restart\|reload)`, `/tmp`, `90` |
+| `BRAIN_*` | brain-loop: vault, inputs, router dir, Jev cap ([its README](brain-loop/README.md#inputs-all-from-the-config)) | under `$LK_HOME` |
 
 Set them in `settings.json` under `env`, or in your shell profile.
 
