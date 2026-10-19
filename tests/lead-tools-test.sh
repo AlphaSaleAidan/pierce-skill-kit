@@ -1,8 +1,8 @@
 #!/bin/sh
-# tab-sweep, report-check and the job watchdog on a fresh user, in a throwaway container:
+# tab-sweep, report-check, the job watchdog, lead-say and the dtach lead on a fresh user, in a throwaway container:
 #   docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/lead-tools-test.sh
 set -e
-apt-get update -qq >/dev/null && apt-get install -y -qq tmux procps git iproute2 netcat-openbsd jq >/dev/null 2>&1
+apt-get update -qq >/dev/null && apt-get install -y -qq tmux procps git iproute2 netcat-openbsd jq dtach >/dev/null 2>&1
 useradd -m tester; cp -r /kit /tmp/kit && chown -R tester /tmp/kit
 su tester -s /bin/sh -c '
 set -e
@@ -62,5 +62,35 @@ tmux capture-pane -p -t hub:Lead -S -80 | tr -d "\n" | grep -q "job long: its wa
 echo "ok: jobs relaunch after a failure and after a usage-limit reset, give up after N tries, and every step (and a killed watchdog) reaches the lead"
 lead-daily | grep -q "dirty: 1 of 1 reports were \"done\" without solid proof" || fail "digest lacks the check summary"
 echo "ok: the daily digest lists tabs with thin done reports"
+# lead-say: never types into a login prompt, a half-typed message, or over a recent keypress
+cfg=~/.config/pierce-skill-kit/config; cp $cfg /tmp/login.cfg
+printf "LK_LEAD_WINDOW=login\nLK_SAY_WAIT_MIN=0\n" >> /tmp/login.cfg
+tmux new-window -d -t hub: -n login "printf \"Paste code here if prompted > \"; cat"
+sleep 1
+out=$(LK_CONFIG=/tmp/login.cfg lead-say "ALERT must not land in the code box"); echo "    $out"
+echo "$out" | grep -q "^queued: a prompt is on screen" || fail "lead-say did not see the login prompt: $out"
+sleep 1
+tmux capture-pane -p -t hub:login | grep -q ALERT && fail "lead-say typed into the login prompt"
+grep -q "UNDELIVERED: ALERT must not land in the code box" ~/.pierce-skill-kit/undelivered.log || fail "queued line not logged as undelivered"
+tmux kill-window -t hub:login
+tmux new-window -d -t hub: -n login "printf \"\342\235\257 half a messa\"; cat"
+sleep 1
+LK_CONFIG=/tmp/login.cfg lead-say --check | grep -q "busy: the human is typing" || fail "half-typed message not seen"
+tmux kill-window -t hub:login
+lead-say --check >/dev/null && fail "idle lead reported busy: $(lead-say --check)"
+touch ~/.pierce-skill-kit/lead.keys
+lead-say --check | grep -q "busy: a keypress in the last 20s" || fail "recent keypress (leader keys file) not seen"
+touch -d "1 hour ago" ~/.pierce-skill-kit/lead.keys
+[ "$(lead-say "free now, goes straight in")" = delivered ] || fail "free lead: not delivered"
+sleep 1; tmux capture-pane -p -t hub:Lead -S -20 | grep -q "free now, goes straight in" || fail "delivered line not in the lead"
+echo "ok: lead-say holds back for a login prompt, a half-typed message and a recent keypress; delivers when free"
+# dtach lead: the Claude lives under dtach, the tmux window is a viewer that lead-say still types into
+cp $cfg /tmp/dtach.cfg; printf "LK_HUB=hub2\nLK_LEAD_DTACH=1\n" >> /tmp/dtach.cfg
+LK_CONFIG=/tmp/dtach.cfg lead -d >/dev/null; sleep 1
+[ -S ~/.pierce-skill-kit/lead.sock ] || fail "no dtach socket for the lead"
+[ "$(LK_CONFIG=/tmp/dtach.cfg lead-say "through dtach")" = delivered ] || fail "dtach lead: not delivered"
+sleep 1; tmux capture-pane -p -t hub2:Lead | grep -q "through dtach" || fail "dtach lead did not get the line"
+tmux kill-session -t hub2
+echo "ok: LK_LEAD_DTACH=1 runs the lead under dtach; lead-say still reaches it"
 echo "ALL LEAD TOOLS TESTS PASSED"
 '

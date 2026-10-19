@@ -62,7 +62,9 @@ Run `lead-round` first: it prints, in one screen, the facts below. Then act on e
    `done`, whose work is committed, that serves nothing, and that has been quiet a while. It logs how to reopen
    each one in `$LK_HOME/retired-tabs.md`. Never close a tab by hand that has uncommitted work or an open
    `needs-human` question; never close windows by keystroke.
-6. **Reopen:** `claude-tab <dir> -n <Project> -c` (last conversation) or `-r <id>` from retired-tabs.md.
+6. **One window for the human.** On a Mac, every tab opens as a *tab* in the human's one Terminal window
+   (`mac-tab`), never as a new window.
+7. **Reopen:** `claude-tab <dir> -n <Project> -c` (last conversation) or `-r <id>` from retired-tabs.md.
 
 ## 6. Route work; the lead never builds
 1. Project work goes to the project's tab, as a brief. You don't edit project code, run its builds or spawn
@@ -123,6 +125,20 @@ Run `lead-round` first: it prints, in one screen, the facts below. Then act on e
 2. CPU-heavy work goes through `heavy`. Never load a machine you don't own.
 3. Daemons: `setsid nohup <cmd> < /dev/null &`, then take the real PID from `ps`.
 4. Remote probes (e.g. a Mac over ssh) only when needed; if that machine is loaded, stop probing it.
+5. **One heavy ML job at a time** (TTS, transcription, local models): run it under a shared `flock` plus `heavy`,
+   and cap threads *in the code* (ONNX `SessionOptions` `intra_op_num_threads=4`, `inter_op_num_threads=1`;
+   torch `set_num_threads(4)`), because `OMP_NUM_THREADS` alone doesn't cap ONNX. Two uncapped jobs can push a
+   16-core box past load 30. Every brief that synthesizes audio says so.
+6. **Never log in or out on a live session's config dir.** No `claude auth login`/`logout` or `/login` against a
+   config dir a running session uses: it swaps or clears the credentials under that session. If a login drops,
+   back up `.credentials.json` and restart the session with its saved login (`claude-acct run <name>`,
+   `--resume <id>`). Never ask the human to paste a login code; if a fresh browser login is truly unavoidable, use
+   a throwaway config dir.
+7. **Scripts that ask questions exit when there is no keyboard.** A wizard run headless (`! cmd`, a job, a pipe)
+   must check for a terminal first and stop with "run this in a terminal you can type in", and stop after a few
+   empty answers instead of looping on end-of-input.
+8. **Messages into the lead go through `lead-say`** (`report` and `tab-watch` already do): it never types over
+   the human or into a login/permission prompt. Never `tmux send-keys` into the lead yourself.
 
 ## Quick reference
 | Situation | Do |

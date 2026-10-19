@@ -1,0 +1,22 @@
+#!/bin/sh
+# leader - view the lead straight through dtach: no tmux on your screen, so your terminal scrolls and selects
+# natively. Needs LK_LEAD_DTACH=1 in the config (then `lead -d` starts the lead's Claude under dtach and the tmux
+# Lead window is only a quiet second viewer, so report/lead-say keep working).
+# Ctrl+\ detaches; closing the window is fine too, the lead keeps running.
+# Keystroke TIMES (never the keys) go to $LK_HOME/lead.keys, so lead-say never types over you.
+. "$(dirname "$0")/lk-config"
+s=$LK_LEAD_SOCK
+[ -S "$s" ] || { echo "leader: the lead isn't running under dtach ($s). Set LK_LEAD_DTACH=1 in the config, then: lead -d" >&2; exit 1; }
+command -v script >/dev/null && script --help 2>&1 | grep -q -- --log-in || { echo "leader: needs util-linux script with --log-in (2.35+)" >&2; exit 1; }
+printf '\033]0;%s\007' "$LK_LEAD_WINDOW"
+# real history in your scrollback first, then push it above the screen, since dtach blanks the screen on attach
+LK_LEAD_DIR=$LK_LEAD_DIR "$(dirname "$0")/lead-history" 2>/dev/null && yes "" | head -n "$(tput lines 2>/dev/null || echo 50)"
+for o in "$LK_HOME"/keys.*; do [ -p "$o" ] && ! kill -0 "${o##*.}" 2>/dev/null && rm -f "$o"; done
+f=$LK_HOME/keys.$$; mkfifo -m 600 "$f"; trap 'rm -f "$f"' EXIT HUP TERM
+python3 -c '
+import os,sys
+f=open(sys.argv[1],"rb",0)
+while f.read(4096): open(sys.argv[2],"a").close(); os.utime(sys.argv[2])
+' "$f" "$LK_HOME/lead.keys" &
+# Ctrl+L on attach = Claude redraws its screen
+script -qf -I "$f" -O /dev/null -c "dtach -a $s -r ctrl_l"

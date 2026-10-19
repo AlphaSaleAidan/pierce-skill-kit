@@ -1,0 +1,45 @@
+#!/bin/sh
+# lead-say "<text>" - type one line into the lead's window, but never over the human and never into a prompt.
+# Busy means any of: text in the lead's input box (the human is mid-message); a login, permission or menu prompt
+# on screen (an alert typed into a /login code box wipes the code the human pasted); the pane scrolled up; or a
+# keypress in the last $LK_SAY_IDLE_S seconds (tmux clients, or $LK_HOME/lead.keys when the human uses `leader`).
+# Not busy: sends now. Busy: retries in the background for $LK_SAY_WAIT_MIN minutes, then logs to undelivered.log.
+#   lead-say "<text>"     send (or queue) one line
+#   lead-say --check      exit 0 and say why if the lead is busy right now, exit 1 if it is free
+. "$(dirname "$0")/lk-config"
+busy() {
+  pane=$(tmux capture-pane -p -t "$LK_LEAD" 2>/dev/null) || { why="no lead window"; return 0; }
+  printf '%s\n' "$pane" | grep "^❯" | tail -1 | sed "s/\xc2\xa0/ /g" | grep -q "^❯ *[^ ]" && { why="the human is typing"; return 0; }
+  printf '%s\n' "$pane" | tail -15 | grep -q -E "$LK_SAY_PROMPTS" && { why="a prompt is on screen"; return 0; }
+  [ "$(tmux display -p -t "$LK_LEAD" '#{pane_in_mode}' 2>/dev/null)" = 1 ] && { why="the pane is scrolled up"; return 0; }
+  now=$(date +%s); k=$LK_HOME/lead.keys
+  if [ -f "$k" ]; then
+    t=$(stat -c %Y "$k" 2>/dev/null || stat -f %m "$k")
+    [ $((now - t)) -lt "$LK_SAY_IDLE_S" ] && { why="a keypress in the last ${LK_SAY_IDLE_S}s"; return 0; }
+  fi
+  for a in $(tmux list-clients -t "$LK_HUB" -F '#{client_activity}' 2>/dev/null); do
+    [ $((now - a)) -lt "$LK_SAY_IDLE_S" ] && { why="a keypress in the last ${LK_SAY_IDLE_S}s"; return 0; }
+  done
+  return 1
+}
+# flock so two senders don't interleave keystrokes; busy is checked again inside the lock
+send() {
+  ( flock -w 20 9; busy && exit 1
+    tmux send-keys -t "$LK_LEAD" -l "$1" && sleep 0.7 && tmux send-keys -t "$LK_LEAD" Enter && sleep 0.5
+  ) 9>"$LK_HOME/.report.lock"
+}
+case $1 in
+  --check) if busy; then echo "busy: $why"; exit 0; else echo free; exit 1; fi ;;
+  --wait)  # the background retry loop
+    end=$(( $(date +%s) + LK_SAY_WAIT_MIN * 60 ))
+    while [ "$(date +%s)" -lt "$end" ]; do
+      busy || { send "$2" && exit 0; }
+      sleep "$LK_SAY_POLL_S"
+    done
+    echo "$(date -u +%Y-%m-%dT%H:%MZ) UNDELIVERED: $2" >> "$LK_HOME/undelivered.log"; exit 1 ;;
+  ''|-h|--help) sed -n 2,8p "$0"; exit 2 ;;
+esac
+tmux list-windows -t "$LK_HUB" -F '#W' 2>/dev/null | grep -qx "$LK_LEAD_WINDOW" || { echo "lead-say: the lead window $LK_LEAD is not running" >&2; exit 3; }
+if ! busy && send "$1"; then echo delivered; exit 0; fi
+busy; echo "queued: ${why:-the lead was busy}; retrying for $LK_SAY_WAIT_MIN min"
+setsid "$0" --wait "$1" < /dev/null > /dev/null 2>&1 &

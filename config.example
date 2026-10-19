@@ -44,6 +44,14 @@ LK_JOB_LIMIT_WAIT_MIN=60
 # LK_HEARTBEATS="$HOME/backups/last-run.log:1500 $HOME/site/uptime.txt:30"
 LK_HEARTBEATS=''
 
+# lead-say (report and tab-watch type into the lead through it): wait until the lead has had no keypress for this
+# many seconds, nothing half-typed in its input box and no login/permission prompt on screen; queue up to N minutes.
+LK_SAY_IDLE_S=20
+LK_SAY_WAIT_MIN=360
+# LK_SAY_PROMPTS='Paste code|Esc to cancel|Do you want|Enter to confirm|Select (login|account)|Login method'
+# 1 = the lead's Claude runs under dtach (apt install dtach), so `leader` shows it with no tmux on your screen.
+LK_LEAD_DTACH=0
+
 # heavy: box-wide queue for CPU-heavy commands.
 LK_HEAVY_SLOTS=2
 LK_HEAVY_NICE=15

@@ -18,7 +18,7 @@
   <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
 
-> **Latest (v0.4.2):** the brain-loop mod (Obsidian + Opus + Jev loop: a linked vault, report triage, plan grading, MCP tools) and the `tab-plan` skill. **v0.4.0:** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
+> **Latest (v0.4.3):** reports never type over you or into a login prompt (`lead-say`); `leader` views the lead with no tmux on your screen. **v0.4.2:** the brain-loop mod (Obsidian + Opus + Jev loop: a linked vault, report triage, plan grading, MCP tools) and the `tab-plan` skill. **v0.4.0:** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
 > **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -100,6 +100,8 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `tab-view <hub:N>` | look at one tab in this terminal without moving anyone else's view |
 | `brief-send <tab> <brief.md>` | point a tab at a brief file in one line |
 | `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed`. Each one gets a cheap second look (`report-check`): a `done` without proof, or a claimed deploy/send/merge, is tagged so the lead checks it first |
+| `lead-say "<line>"` | type a line into the lead only when it's free: never over a half-typed message, a scrolled-up pane, a recent keypress, or a login/permission prompt (an alert typed into a `/login` box wipes the pasted code). Busy → queued and retried |
+| `leader` | with `LK_LEAD_DTACH=1`: view the lead straight through dtach, no tmux on your screen (your terminal scrolls natively), recent history printed first (`lead-history`) |
 | `tab-sweep [--dry-run]` | close finished tabs: last report `done`, work committed, nothing still serving, quiet for a while. Flags the ones that aren't; logs how to reopen each |
 | `order add\|done\|wait\|list` | ledger of your asks, closed only with proof; shows each one's age, `OLD` past 24 h |
 | `lead-round` | one screen for the lead's monitor round: machine, orders, tabs (stuck on a prompt? unsaved?), jobs, heartbeats, tunnels, what `tab-sweep` would close. Red lines start with `!` |

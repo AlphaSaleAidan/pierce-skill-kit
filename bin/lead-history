@@ -1,0 +1,41 @@
+#!/usr/bin/env python3
+# lead-history [transcript.jsonl] [n] - print the last n messages of the lead's Claude conversation (your words and
+# the lead's text only, no tool noise). `leader` runs it before attaching so your terminal has real history to
+# scroll back through. Default: the newest transcript for $LK_LEAD_DIR (honours CLAUDE_CONFIG_DIR).
+import glob, json, os, re, shutil, sys, textwrap
+if len(sys.argv) > 1 and sys.argv[1].endswith('.jsonl'):
+    path = sys.argv[1]
+else:
+    lead_dir = os.environ.get('LK_LEAD_DIR', os.path.expanduser('~/lead'))
+    cfg = os.environ.get('CLAUDE_CONFIG_DIR', os.path.expanduser('~/.claude'))
+    found = glob.glob(os.path.join(cfg, 'projects', re.sub(r'[^A-Za-z0-9]', '-', lead_dir), '*.jsonl'))
+    if not found:
+        sys.exit('lead-history: no transcript yet for ' + lead_dir)
+    path = max(found, key=os.path.getmtime)
+n = int(sys.argv[-1]) if len(sys.argv) > 1 and sys.argv[-1].isdigit() else 60
+width = min(shutil.get_terminal_size((120, 40)).columns, 160) - 2
+with open(path, 'rb') as f:  # transcripts get large: read only the tail
+    f.seek(max(0, os.path.getsize(path) - 6_000_000))
+    lines = f.read().decode('utf-8', 'replace').splitlines()[1:]
+msgs = []
+for l in lines:
+    try:
+        d = json.loads(l)
+    except ValueError:
+        continue
+    if d.get('isSidechain') or d.get('isMeta') or d.get('type') not in ('user', 'assistant'):
+        continue
+    c = d.get('message', {}).get('content')
+    parts = [c] if isinstance(c, str) else [b.get('text', '') for b in c or [] if isinstance(b, dict) and b.get('type') == 'text']
+    text = '\n'.join(p for p in parts if p).strip()
+    if not text or text.startswith('<') or 'tool_use_id' in text:
+        continue
+    msgs.append((d['type'], d.get('timestamp', '')[11:16], text))
+DIM, BOLD, OFF = '\033[2m', '\033[1m', '\033[0m'
+print(f'{DIM}── earlier in the lead (last {min(n, len(msgs))} messages) ──{OFF}')
+for who, ts, text in msgs[-n:]:
+    head = f'{BOLD}● Lead{OFF}' if who == 'assistant' else f'{BOLD}↳ report{OFF}' if text.startswith('[REPORT') else f'{BOLD}❯ you{OFF}'
+    print(f'\n{head} {DIM}{ts} UTC{OFF}')
+    for para in text.splitlines():
+        print(textwrap.fill(para, width, initial_indent='  ', subsequent_indent='  ') if para.strip() else '')
+print(f'\n{DIM}── live lead below ──{OFF}\n')
