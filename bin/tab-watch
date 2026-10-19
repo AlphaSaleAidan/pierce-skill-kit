@@ -21,8 +21,7 @@ for w in $(tmux list-windows -t "$LK_HUB" -F '#{window_index}'); do
     laststat=$(awk -F'\t' -v t="$name" '$6==t{x=$3} END{print x}' "$R" 2>/dev/null)
     lastsec=0; [ -n "$last" ] && lastsec=$(date -u -d "$last" +%s 2>/dev/null || echo 0)
     if [ $((now - lastsec)) -gt $((LK_IDLE_MIN * 60)) ] && [ "$laststat" != needs-human ]; then
-      tmux send-keys -t "$LK_LEAD" -l "[WATCH] tab '$name' ($LK_HUB:$w) is idle with no report in the last $LK_IDLE_MIN min. Check it: finished, stuck, or waiting on the human?" \
-        && sleep 0.5 && tmux send-keys -t "$LK_LEAD" Enter
+      "$(dirname "$0")/lead-say" "[WATCH] tab '$name' ($LK_HUB:$w) is idle with no report in the last $LK_IDLE_MIN min. Check it: finished, stuck, or waiting on the human?" >/dev/null
     fi
     flagged=yes
   fi

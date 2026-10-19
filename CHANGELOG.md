@@ -3,6 +3,23 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.4.3 (2026-10-19)
+**Run this** if you already installed: `lead update`. Optional: `apt install dtach`, set `LK_LEAD_DTACH=1`, restart
+the lead, then view it with `leader`.
+
+### Fixed
+- **Reports never type into a prompt.** `report` and `tab-watch` now go through the new `lead-say`, which waits
+  while the lead is busy: something half-typed in its input box, the pane scrolled up, a keypress in the last 20 s,
+  or a login/permission/menu prompt on screen. Before, an alert could land in a `/login` code box and wipe the code
+  the human had just pasted. Busy lines are queued and retried for 6 h, then logged to `undelivered.log`.
+
+### Added
+- `leader` + `lead-history`: with `LK_LEAD_DTACH=1` the lead's Claude runs under dtach; `leader` shows it with no
+  tmux on your screen (native scroll and select), prints recent history first, and records keypress *times* (never
+  keys) so `lead-say` never types over you.
+- terminal-lead rules: one Mac window (tabs, not windows); one heavy ML job at a time with threads capped in code;
+  never log in/out on a live session's config dir; question-asking scripts exit when there's no keyboard.
+
 ## v0.4.2 (2026-10-18)
 **Run this** if you already installed: `lead update`. To try the new loop: `mods/install.sh brain-loop`, then follow
 [the README section](README.md#obsidian--opus--jev-loop).

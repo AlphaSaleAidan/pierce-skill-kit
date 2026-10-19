@@ -21,7 +21,8 @@ jobs:
             /mnt/bin/lk-config /mnt/mods/agent-board/bin/health.sh /mnt/mods/ruflo/apply.sh \
             /mnt/skills/remote-gpu-render/scripts/link_watch.sh /mnt/skills/studio-vfx/tools/encode_alpha.sh \
             /mnt/mods/brain-loop/bin/brain-loop /mnt/mods/brain-loop/bin/stuck-check /mnt/tests/brain-loop-test.sh \
-            /mnt/examples/brain-loop-inputs/make-vault.sh
+            /mnt/examples/brain-loop-inputs/make-vault.sh \
+            /mnt/bin/lead-say /mnt/bin/leader /mnt/tests/lead-tools-test.sh
       - name: hook test
         run: sh tests/hook-test.sh
       - name: skill routing + recommender
@@ -47,6 +48,8 @@ jobs:
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/accounts-test.sh
       - name: mods install/uninstall round trip
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/mods-test.sh
+      - name: lead tools (report-check, tab-sweep, job watchdog, lead-say busy checks, dtach lead)
+        run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/lead-tools-test.sh
       - name: brain-loop (vault, router, plan-grade, MCP, page, hook, stuck-check) on fake data
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/brain-loop-test.sh
   bridge:

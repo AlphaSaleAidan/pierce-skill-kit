@@ -26,7 +26,14 @@ if [ "$1" = update ]; then   # pull the latest kit, re-apply it, reload tmux liv
 fi
 if ! tmux has-session -t "$LK_HUB" 2>/dev/null; then
   mkdir -p "$LK_LEAD_DIR"
-  tmux new-session -d -s "$LK_HUB" -n "$LK_LEAD_WINDOW" -c "$LK_LEAD_DIR" "$LK_CLAUDE" || exit 1
+  run=$LK_CLAUDE
+  # LK_LEAD_DTACH=1: the lead's Claude lives under dtach, so you can view it with `leader` (no tmux on your screen);
+  # this tmux window is then only a quiet second viewer that report/lead-say type into. -E: Ctrl+\ can't detach it.
+  if [ "$LK_LEAD_DTACH" = 1 ]; then
+    if command -v dtach >/dev/null; then run="dtach -A $LK_LEAD_SOCK -E -r none $LK_CLAUDE"
+    else echo "lead: LK_LEAD_DTACH=1 but dtach is not installed (apt install dtach); starting without it" >&2; fi
+  fi
+  tmux new-session -d -s "$LK_HUB" -n "$LK_LEAD_WINDOW" -c "$LK_LEAD_DIR" "$run" || exit 1
   tmux set-window-option -t "$LK_LEAD" automatic-rename off >/dev/null
   echo "started the lead ($LK_LEAD)"
 fi
