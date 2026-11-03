@@ -3,6 +3,32 @@
 The rules that make one lead + many Claude tabs safe to leave running. Each rule exists because skipping it
 was expensive; the *why* is the failure it prevents. Paste-ready version: [templates/CLAUDE.md](templates/CLAUDE.md).
 
+## Hard rules, enforced by a tool (v0.5)
+Each of these failed for a real lead in one night. Prose alone didn't hold, so each one now has a tool or check.
+
+1. **A link goes to a person only after `link-check` passed on that exact URL.** It opens the page in a real
+   browser, logged out, and asserts text the person must see. Register the `send-guard` hook on your send tools: it
+   refuses a message whose links have no pass in the last hour. *Why: a link went out after a 200 status check, and
+   the page rejected the link's params; the person saw an error.*
+2. **The lead routes, decides and verifies; it doesn't do the work.** Project work goes to the project's tab;
+   cross-project hands-on work (installs, box fixes, data pulls) goes to an **Ops** tab. The `lead-cap` hook blocks
+   the lead's 7th hands-on command in a turn (its own tools don't count). Keep about 8 tabs open at most; close
+   finished ones with `tab-sweep`. *Why: a lead that did the work itself while juggling 12 tabs let quality slip
+   everywhere.*
+3. **Releases go through `go-live`.** It checks every input of every later step BEFORE touching live, snapshots live,
+   rolls back on any failed step, and leaves an undo stamp. Never hand-chain `rsync && build && restart` on live.
+   *Why: a release script copied to live, then failed on a missing file two steps later: a half-released site.*
+4. **Read inboxes by time since the last check, with `inbox-since`; never "the last N lines/chars".** *Why: a routine
+   check read only the tail of a channel and missed a vendor's reply.*
+5. **"Done" needs proof the lead opened.** `report <p> done` is refused without a proof file that exists or a link;
+   the lead opens that proof before telling the human. *Why: untested "done" claims reached the human.*
+6. **Never ask for a key in chat; never paste one there.** The human copies the key and runs `secret-in <file> [VAR]`
+   in their own terminal; Claude gets the path. If a key is pasted anyway: don't repeat it, tell the human to rotate it.
+   *Why: a token pasted into a chat lives in logs and transcripts and has to be rotated.*
+7. **Scripts post through `post-once`; send tools sit behind `send-guard`.** Both refuse an identical second post, and
+   `post-once --count` checks the target before and after (exactly +1). *Why: retries and two copies of one script
+   double-posted to people.*
+
 ## Sends & clients
 - **Ask the human right before every outbound send**, even when the task says "send". *Why: an earlier OK covered a draft that may no longer be true.*
 - **Prove the client's real action works before you send** (the call rings, the page loads logged-out, the file opens). *Why: a "tests passed" email went out while the real call had never worked.*

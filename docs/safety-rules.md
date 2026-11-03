@@ -10,6 +10,13 @@ hold because Claude reads them.
 | No stuck tab goes unnoticed | `tab-watch` cron |
 | ≤N heavy jobs, low priority, RAM floor | `heavy` (file locks + `nice` + MemAvailable check) |
 | The lead manages, doesn't build | optional hook `hooks/lead-no-worker-agents.sh` |
+| The lead doesn't do hands-on work | optional hook `hooks/lead-cap.sh`: 7th hands-on command in a turn is blocked |
+| Links work for the person who gets them | `link-check` (real browser, logged out, expected text) + `hooks/send-guard.sh` refuses unchecked links |
+| No double posts | `post-once` for scripts; `send-guard` for send tools |
+| "Done" has proof | `report` refuses `done` without an existing proof file or a link (exit 3) |
+| No half-released site | `go-live`: preflight before live, auto-rollback, undo stamp |
+| No missed messages | `inbox-since`: by time since last check; flags a cut-off page |
+| No keys in chat | `secret-in`: clipboard -> secrets file, prints only the path |
 | Everything else (sends, deploys, spend, secrets, pkill) | the rules in CLAUDE.md. Claude follows them; nothing technical stops it |
 
 ## Make the "Claude follows them" rules sturdier
@@ -28,3 +35,11 @@ Subagents whose prompt starts with `READ-ONLY` (and the read-only `Explore` agen
 ```
 It only acts in the lead's own window (`hub:Lead`); project tabs and any other Claude, even one started in the
 lead's folder, can use subagents freely. Needs `jq`.
+
+## send-guard and lead-cap
+```sh
+mods/install.sh hook send-guard 'mcp__mail__send_message|mcp__slack__post_message'   # your send tools' names
+mods/install.sh hook lead-cap                                                       # lead window only
+```
+`send-guard` sits on PreToolUse (refuses unchecked links and an identical second send) and PostToolUse (records the
+send). `lead-cap` sits on UserPromptSubmit (resets) and PreToolUse Bash (counts); `LK_LEAD_CMD_CAP` sets the cap.

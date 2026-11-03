@@ -1,0 +1,24 @@
+#!/bin/sh
+# inbox-since - read new messages by TIME since your last check, never "the last N lines/chars" (a tail read once
+# hid a vendor's reply that landed between two routine checks).
+#   <your fetch> | inbox-since <name> [--page N]
+# Input: one message per line, "<timestamp><TAB><text>"; timestamps sort (epoch like 1730592000.12, or one ISO format).
+# Prints only lines newer than the last check and remembers the newest one. --page N: your fetch returns at most N
+# lines; if it returned N and all of them are new, older new ones were cut off: exit 3 so you fetch further back.
+# A line with no timestamp is an error (exit 2): fix the fetch, don't guess. --reset forgets the last check.
+. "$(dirname "$0")/lk-config"
+[ -n "$1" ] || { sed -n 4,8p "$0"; exit 2; }
+name=$1; shift; page=0; d=$LK_HOME/inbox; mkdir -p "$d"; st=$d/$(printf '%s' "$name" | tr -c 'A-Za-z0-9._-' _).last
+case $1 in --reset) rm -f "$st"; echo "inbox-since: $name reset"; exit 0;; --page) page=$2;; esac
+last=$(cat "$st" 2>/dev/null)
+tmp=$(mktemp); trap 'rm -f "$tmp"' EXIT
+awk -F'\t' -v last="$last" -v page="$page" -v tmp="$tmp" '
+  function newer(a, b) { if (b == "") return 1; if (a ~ /^[0-9.]+$/ && b ~ /^[0-9.]+$/) return a + 0 > b + 0; return a > b }
+  NF < 2 || $1 == "" { printf "inbox-since: line %d has no timestamp<TAB>text: %s\n", NR, substr($0, 1, 80) > "/dev/stderr"; bad = 1; exit }
+  { n++; if (newer($1, last)) { print; new++; if (top == "" || newer($1, top)) top = $1 } }
+  END { if (bad) exit 2
+    if (top != "") print top > tmp
+    if (page > 0 && n >= page && new == n && last != "") { printf "inbox-since: all %d fetched messages are new: older new ones may be cut off; fetch further back to %s\n", n, last > "/dev/stderr"; exit 3 }
+  }' || exit $?
+[ -s "$tmp" ] && cp "$tmp" "$st"
+exit 0

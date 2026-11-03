@@ -1,0 +1,54 @@
+#!/bin/sh
+# go-live - release a folder to a live folder without ever leaving it half-released.
+#   go-live --live DIR --new DIR [--needs "path ..."] [--then "cmd"]... [--verify "cmd"] [--dry-run]
+#   go-live --undo <stamp>       put the live folder back exactly as it was before that release
+# 1. PREFLIGHT, before touching live: the new folder exists and isn't empty, every --needs path exists (list every
+#    file a later step reads), every --then/--verify command's program is installed, and there's disk for a snapshot.
+# 2. Snapshot live, copy new over it (rsync --delete), run each --then in order (in the live folder), then --verify.
+# 3. Any step fails -> live is restored from the snapshot automatically (and --verify re-run on the old version).
+# Every release leaves an undo stamp: $LK_HOME/go-live/<stamp>/UNDO holds the one command that reverts it.
+. "$(dirname "$0")/lk-config"
+live=; new=; needs=; thens=; verify=; dry=0; nl='
+'
+usage() { sed -n 3,4p "$0"; exit 2; }
+undo() { # undo <stamp dir>
+  [ -d "$1/before" ] || { echo "go-live: no snapshot in $1" >&2; return 1; }
+  l=$(cat "$1/live"); rsync -a -c --delete "$1/before/" "$l/" && echo "go-live: $l restored to before $(basename "$1")"; }
+while [ $# -gt 0 ]; do case $1 in
+  --live) live=$2; shift 2;; --new) new=$2; shift 2;; --needs) needs="$needs $2"; shift 2;;
+  --then) thens="$thens$2$nl"; shift 2;; --verify) verify=$2; shift 2;; --dry-run) dry=1; shift;;
+  --undo) [ -n "$2" ] || usage; undo "$LK_HOME/go-live/$2"; exit;;
+  *) usage;; esac; done
+[ -n "$live" ] && [ -n "$new" ] || usage
+command -v rsync >/dev/null || { echo "go-live: needs rsync" >&2; exit 2; }
+# --- preflight: everything a later step needs, checked before live is touched ---
+bad=
+[ -d "$new" ] && [ -n "$(ls -A "$new" 2>/dev/null)" ] || bad="$bad${nl}  new folder missing or empty: $new"
+[ -d "$live" ] || bad="$bad${nl}  live folder missing: $live"
+for p in $needs; do [ -e "$p" ] || bad="$bad${nl}  needed file missing: $p"; done
+tmpb=$(mktemp)
+printf '%s\n%s\n' "$thens" "$verify" | while IFS= read -r c; do
+  [ -n "$c" ] || continue; prog=${c%% *}
+  command -v "$prog" >/dev/null 2>&1 || [ -x "$live/$prog" ] || [ -x "$new/$prog" ] || echo "  command not found: $prog"
+done > "$tmpb"
+[ -s "$tmpb" ] && bad="$bad$nl$(cat "$tmpb")"; rm -f "$tmpb"
+need_kb=$(du -sk "$live" 2>/dev/null | cut -f1); mkdir -p "$LK_HOME/go-live"
+free_kb=$(df -Pk "$LK_HOME/go-live" | awk 'NR==2{print $4}')
+[ "${need_kb:-0}" -lt "${free_kb:-0}" ] || bad="$bad${nl}  not enough disk for the snapshot (${need_kb}K needed)"
+if [ -n "$bad" ]; then echo "go-live: PREFLIGHT FAILED, live not touched:$bad" >&2; exit 3; fi
+echo "go-live: preflight ok (new folder, $(echo $needs | wc -w) needed files, commands, disk)"
+[ $dry = 1 ] && { echo "go-live: --dry-run, stopping before live"; exit 0; }
+# --- release ---
+stamp=$(date +%Y%m%d-%H%M%S)-$$; sd=$LK_HOME/go-live/$stamp; mkdir -p "$sd"
+live=$(cd "$live" && pwd); printf '%s\n' "$live" > "$sd/live"
+rsync -a "$live/" "$sd/before/" || { echo "go-live: snapshot failed, live not touched" >&2; exit 3; }
+printf 'go-live --undo %s\n' "$stamp" > "$sd/UNDO"
+fail() { echo "go-live: FAILED at: $1. Rolling back." >&2; undo "$sd" >&2
+  [ -n "$verify" ] && { (cd "$live" && sh -c "$verify") >/dev/null 2>&1 && echo "go-live: old version verifies again" >&2 || echo "go-live: WARNING old version does not pass --verify either" >&2; }
+  echo "failed: $1" > "$sd/result"; exit 1; }
+rsync -a -c --delete "$new/" "$live/" || fail "copy to live"
+printf '%s' "$thens" | { while IFS= read -r c; do [ -n "$c" ] || continue
+  (cd "$live" && sh -c "$c") || { echo "$c" > "$sd/failed-step"; exit 1; }; done; } || fail "$(cat "$sd/failed-step")"
+[ -z "$verify" ] || (cd "$live" && sh -c "$verify") || fail "verify ($verify)"
+echo released > "$sd/result"
+echo "go-live: released. Undo: go-live --undo $stamp"

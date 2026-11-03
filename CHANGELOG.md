@@ -3,6 +3,33 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## v0.5.0 (2026-11-03): strict rules, each backed by a tool
+**Run this** if you already installed: `lead update`. Then turn on the two hooks:
+`mods/install.sh hook lead-cap` and `mods/install.sh hook send-guard '<your send tools>'` (see
+[docs/safety-rules.md](docs/safety-rules.md#send-guard-and-lead-cap)). `link-check` needs Chrome, Chromium or Edge.
+
+Seven failures from one real night of running a lead, each turned into a rule that a tool enforces
+([RULES.md](RULES.md#hard-rules-enforced-by-a-tool-v05)).
+
+### Changed (may break a script)
+- **`report <p> done` is refused (exit 3) without proof**: at least one proof file that exists, or a link. Use
+  `progress` until you have it. Before, a thin "done" was only flagged.
+
+### Added
+- `link-check <url> "<text>"`: opens the exact URL in a real browser, logged out, and asserts text the person must
+  see. A 200 isn't a check: the page can still reject the link's params.
+- `hooks/send-guard.sh`: on your send tools, refuses links with no recent `link-check` pass and an identical second send.
+- `hooks/lead-cap.sh`: blocks the lead's 7th hands-on command in a turn (`LK_LEAD_CMD_CAP`); its own tools don't count.
+  New rule: the lead routes, decides and verifies; an **Ops** tab owns cross-project hands-on work.
+- `go-live`: releases a folder with a preflight of every later step's inputs BEFORE live is touched, a snapshot,
+  automatic rollback on any failed step, and an undo stamp (`go-live --undo <stamp>`).
+- `inbox-since`: reads messages by timestamp since the last check, never "the last N chars"; flags a cut-off page.
+- `post-once`: one post per message for scripts; `--count` checks the target before and after (exactly +1).
+- `secret-in`: the human copies a key and runs it in their own terminal; it lands in the secrets folder (600), only
+  the path is printed, the clipboard is cleared. Never ask for a key in chat.
+- `tests/strict-rules-test.sh` (CI): every tool above in a clean container, incl. a page that returns 200 but
+  rejects its link, and the macOS clipboard path.
+
 ## v0.4.3 (2026-10-19)
 **Run this** if you already installed: `lead update`. Optional: `apt install dtach`, set `LK_LEAD_DTACH=1`, restart
 the lead, then view it with `leader`.

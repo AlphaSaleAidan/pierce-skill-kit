@@ -17,13 +17,15 @@ lead -d; for p in clean dirty asking fresh; do claude-tab ~/$p -n $p >/dev/null;
 tmux new-window -d -t hub: -n serving -c ~/serving "nc -l -p 8765"
 rep() { TMUX_PANE=$(tmux display -p -t "hub:$1" "#{pane_id}") report "$@" >/dev/null; }
 # report-check rides on every report
-rep clean done "shipped the fix, commit 3f9a2c1" /etc/hostname; rep dirty done "all done"; rep asking needs-human "A or B?"
+rep clean done "shipped the fix, commit 3f9a2c1" /etc/hostname; rep dirty done "all done" /etc/hostname; rep asking needs-human "A or B?"
 rep serving done "preview up, commit 3f9a2c1" /etc/hostname
 sleep 1; L=$(tmux capture-pane -p -t hub:Lead -S -40 | tr -d "\n")
 echo "$L" | grep -q "shipped the fix, commit 3f9a2c1 | /etc/hostname {check rules: ok}" || fail "no ok check on a proven report"
-echo "$L" | grep -q "all done {check rules: no proof for done: verify before telling the human}" || fail "thin done not flagged"
+rep dirty done "all done, trust me" && fail "a done with no proof was accepted"
+rep dirty done "all done" /no/such/file && fail "a done whose proof file does not exist was accepted"
+grep -q "trust me" ~/.pierce-skill-kit/reports.tsv && fail "a refused done was logged"
 [ "$(grep -c rules ~/.pierce-skill-kit/report-checks.tsv)" = 4 ] || fail "checks not logged"
-echo "ok: every report carries a check; a done without proof is flagged; checks are logged"
+echo "ok: every report carries a check; a done without proof is refused; checks are logged"
 # a past conversation for the clean tab, so the retired line can resume it
 mkdir -p ~/.claude/projects/$(printf %s "$HOME/clean" | sed "s/[^A-Za-z0-9]/-/g"); touch ~/.claude/projects/$(printf %s "$HOME/clean" | sed "s/[^A-Za-z0-9]/-/g")/abc-123.jsonl
 sleep 1; out=$(tab-sweep --dry-run)
@@ -60,7 +62,8 @@ kill -9 "$(cat ~/.pierce-skill-kit/jobs/long/pid)"; tab-watch; sleep 1
 [ "$(cat ~/.pierce-skill-kit/jobs/long/state)" = died ] || fail "dead watchdog not noticed"
 tmux capture-pane -p -t hub:Lead -S -80 | tr -d "\n" | grep -q "job long: its watchdog died" || fail "dead watchdog not reported"
 echo "ok: jobs relaunch after a failure and after a usage-limit reset, give up after N tries, and every step (and a killed watchdog) reaches the lead"
-lead-daily | grep -q "dirty: 1 of 1 reports were \"done\" without solid proof" || fail "digest lacks the check summary"
+printf "%s\tdirty\tdone\tweak\tfalse\t1\tjev\n" "$(date -u +%Y-%m-%dT%H:%MZ)" >> ~/.pierce-skill-kit/report-checks.tsv   # a weak-proof done, as a model grader sees it
+lead-daily | grep -q "dirty: 1 of 2 reports were \"done\" without solid proof" || fail "digest lacks the check summary"
 echo "ok: the daily digest lists tabs with thin done reports"
 # lead-say: never types into a login prompt, a half-typed message, or over a recent keypress
 cfg=~/.config/pierce-skill-kit/config; cp $cfg /tmp/login.cfg

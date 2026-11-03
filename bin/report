@@ -2,10 +2,14 @@
 # report - the ONE way a project tab tells the lead something. It logs the line AND types it into the lead's
 # window, so a report can never go to a stale session nobody reads.
 #   report <project> <done|progress|blocked|needs-human|failed> "<one line: result + proof>" [path-or-link ...]
+# done is refused without at least one proof path that exists or an http(s) link.
 . "$(dirname "$0")/lk-config"
 [ $# -ge 3 ] || { sed -n 2,4p "$0"; exit 2; }
 proj=$1; st=$2; msg=$3; shift 3; extra="$*"
 case $st in done|progress|blocked|needs-human|failed) ;; *) echo "report: status must be done|progress|blocked|needs-human|failed" >&2; exit 2;; esac
+# "done" needs proof the lead can open: an existing file, or a link. A claim alone is refused (exit 3), not logged.
+if [ "$st" = "done" ]; then ok=; for p in $extra; do case $p in http://*|https://*) ok=1;; *) [ -e "$p" ] && ok=1;; esac; done
+  [ -n "$ok" ] || { echo "report: refused. 'done' needs proof: a file that exists or a link, e.g. report $proj done \"<what>\" out/test.log. Not proven yet? Use progress." >&2; exit 3; }; fi
 log=$LK_HOME/reports.tsv
 [ -f "$log" ] || printf 'time_utc\tproject\tstatus\tmessage\tproof\ttab\n' > "$log"
 tab=$(tmux display -p -t "${TMUX_PANE:-}" '#{window_name}' 2>/dev/null || echo "?")

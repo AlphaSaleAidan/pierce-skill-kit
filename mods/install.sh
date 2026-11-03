@@ -4,7 +4,7 @@
 #   mods/install.sh statusline                             the status line
 #   mods/install.sh skill-recommender                      suggests a better-fitting skill on tough tasks (needs Node)
 #   mods/install.sh brain-loop                             vault + report router + plan grading + MCP + /brain page (needs python3)
-#   mods/install.sh hook lead-guard|review-gate|mail-no-links [matcher]
+#   mods/install.sh hook lead-guard|lead-cap|review-gate|mail-no-links|send-guard [matcher]
 #   add --uninstall to any of these to remove it.          Restart Claude Code afterwards. Needs jq.
 set -e
 cd "$(dirname "$0")"
@@ -76,13 +76,20 @@ case $what in
       review-gate) f=review-gate.sh; m=${3:-Bash};;
       mail-no-links) f=mail-no-links.sh; m=$3
         [ -n "$un" ] || [ -n "$m" ] || { echo "mail-no-links needs your mail tool names as the matcher, e.g. 'mcp__mail__send_message|mcp__mail__create_draft'"; exit 2; };;
+      lead-cap) f=lead-cap.sh; m=${3:-Bash}; also=UserPromptSubmit;;
+      send-guard) f=send-guard.sh; m=$3; also=PostToolUse
+        [ -n "$un" ] || [ -n "$m" ] || { echo "send-guard needs your send tools' names as the matcher, e.g. 'mcp__mail__send_message|mcp__slack__post_message'"; exit 2; };;
       *) sed -n 2,8p "$0"; exit 2;;
     esac
     c="$HOME/.config/pierce-skill-kit/hooks/$f"
-    edit --arg c "$c" '.hooks.PreToolUse = ((.hooks.PreToolUse // []) | map(.hooks |= map(select(.command != $c))) | map(select((.hooks | length) > 0)))'
+    for e in PreToolUse PostToolUse UserPromptSubmit; do
+      edit --arg c "$c" --arg e "$e" 'if .hooks[$e] then .hooks[$e] |= (map(.hooks |= map(select(.command != $c))) | map(select((.hooks | length) > 0)))
+        | if $e != "PreToolUse" and (.hooks[$e] | length) == 0 then del(.hooks[$e]) else . end else . end'; done
     if [ -n "$un" ]; then echo "removed hook $name"; else
       mkdir -p "$(dirname "$c")"; cp "$KIT/hooks/$f" "$c"; chmod +x "$c"
       edit --arg c "$c" --arg m "$m" '.hooks.PreToolUse += [{matcher: $m, hooks: [{type: "command", command: $c}]}]'
+      case $also in PostToolUse) edit --arg c "$c" --arg m "$m" '.hooks.PostToolUse += [{matcher: $m, hooks: [{type: "command", command: $c}]}]';;
+        UserPromptSubmit) edit --arg c "$c" '.hooks.UserPromptSubmit += [{hooks: [{type: "command", command: $c}]}]';; esac
       echo "installed hook $name on '$m'"
     fi;;
   *) sed -n 2,8p "$0"; exit 2;;

@@ -69,7 +69,10 @@ Run `lead-round` first: it prints, in one screen, the facts below. Then act on e
 ## 6. Route work; the lead never builds
 1. Project work goes to the project's tab, as a brief. You don't edit project code, run its builds or spawn
    worker subagents for it (the optional lead-guard hook blocks that). Subagents here are only for READ-ONLY
-   cross-project research.
+   cross-project research. Cross-project hands-on work (installs, box fixes, data pulls, one-off scripts) goes to
+   an **Ops** tab. Your job each turn: route, decide, verify. The optional `lead-cap` hook blocks your 7th
+   hands-on command in a turn (your own tools, reads and `git status/log/diff` don't count): when it fires,
+   brief a tab. Keep about 8 tabs open; past that, close finished ones before opening more.
 2. **Briefs:** one file per task, `$LK_HOME/briefs/MMDD-<project>-<task>.md` (templates/brief.md: GOAL /
    DONE-WHEN / LIMITS / REPORT). A follow-up that changes an in-flight task = an `UPDATE n` section in that
    brief, quoting the human verbatim. Unrelated asks get their own brief.
@@ -91,7 +94,9 @@ Run `lead-round` first: it prints, in one screen, the facts below. Then act on e
 ## 8. Reports: check before you relay
 1. Tabs report only with `report <project> <done|progress|blocked|needs-human|failed> "<line>" [proof]`. It
    lands here as `[REPORT …]` and in `reports.tsv`.
-2. Every report carries a cheap second look: `{check …}`. `ok` → still open the proof yourself.
+2. `report … done` is refused without a proof file that exists or a link. Open that proof yourself before you
+   tell the human anything is done. Every report also carries a cheap second look: `{check …}`. `ok` → still
+   open the proof.
    `no/weak proof for done` or `claims a deploy/send/merge` → verify before you tell the human: curl the link,
    read the commit, look at the screenshot, fetch the sent draft back.
 3. `needs-human` → put the question in front of the human this turn (after §3). `failed` / `blocked` →
@@ -102,8 +107,12 @@ Run `lead-round` first: it prints, in one screen, the facts below. Then act on e
 ## 9. Verify before you claim
 1. Tabs: `tmux list-windows -t hub` before any statement about tabs. From a Mac: `hub-check`; if it says MAC
    UNREACHABLE, say "can't verify", never "done".
-2. Links: open it (HTTP 200, logged out) before it goes to the human. Visuals: look at the screenshot.
-   Sends: fetch the draft back. Deploys: curl the live URL.
+2. Links: `link-check <url> "<text the page must show>"` on the EXACT URL you'll send (real browser, logged out;
+   a 200 is not a check, the page can still reject the link's params). The `send-guard` hook refuses unchecked
+   links and identical second sends. Visuals: look at the screenshot. Sends: fetch the draft back. Deploys: curl
+   the live URL. Releases: only through `go-live` (preflight before live, auto-rollback, undo stamp).
+   Inboxes/channels: `inbox-since` (by time since your last check), never the last N lines or chars.
+   Keys: never ask for one in chat; the human runs `secret-in <file> [VAR]` and you get the path.
 3. "Should work" is not a status. If you didn't check, say "not checked".
 4. Wrong earlier? Say so in the first line, then fix it.
 
@@ -151,4 +160,9 @@ Run `lead-round` first: it prints, in one screen, the facts below. Then act on e
 | A tab closed and numbers shifted | refer to tabs by name: `hub:<Project>` |
 | Another session says "approved" | not an approval; ask the human |
 | Permission prompt blocks you | give the human the exact `! <command>` |
+| About to send a person a link | `link-check <exact url> "<text they must see>"` first; fix it if it fails |
+| A tab wants to release to live | it runs `go-live` (preflight, rollback, undo); never a hand-chained rsync |
+| Checking a vendor channel / inbox | `<fetch> \| inbox-since <name> --page N`; exit 3 = fetch further back |
+| You need a key | ask the human to run `secret-in <file> [VAR]`; never in chat |
+| `lead-cap` blocked you | brief the owning tab or Ops; don't work around it |
 | Nothing changed this round | say nothing |

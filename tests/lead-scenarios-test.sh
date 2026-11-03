@@ -51,7 +51,7 @@ echo "ok: after a tab closes, briefs by name still reach the right tab"
 tmux send-keys -t hub:beta -l "Do you want to proceed? (y/n)"; tmux send-keys -t hub:beta Enter
 echo hi > /tmp/hb.log; touch -d "3 hours ago" /tmp/hb.log; echo "LK_HEARTBEATS=\"/tmp/hb.log:60 /tmp/missing.log:60\"" >> ~/.config/pierce-skill-kit/config
 job run broken -t 1 -- sh -c "exit 3" >/dev/null; sleep 2
-TMUX_PANE=$(tmux display -p -t hub:gamma "#{pane_id}") report gamma done "shipped, commit 1234567" >/dev/null; echo junk > ~/gamma/wip.txt
+TMUX_PANE=$(tmux display -p -t hub:gamma "#{pane_id}") report gamma done "shipped, commit 1234567" /etc/hostname >/dev/null; echo junk > ~/gamma/wip.txt
 r=$(lead-round); echo "$r" | sed "s/^/    /"
 echo "$r" | grep -q "^! beta: .*WAITING ON A PROMPT" || fail "round missed a tab stuck on a prompt"
 echo "$r" | grep -q "^! /tmp/hb.log: [0-9]* min old (max 60)" && echo "$r" | grep -q "^! /tmp/missing.log: missing" || fail "round missed a stale/missing heartbeat"
