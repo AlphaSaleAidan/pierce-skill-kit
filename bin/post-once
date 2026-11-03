@@ -1,0 +1,29 @@
+#!/bin/sh
+# post-once - run a post/send command at most once per message: no double posts from scripts or retries.
+#   post-once [--window MIN] [--count "<cmd that prints how many matching posts exist>"] <message-key> -- <post cmd...>
+# The key is what makes a post the same post (e.g. "slack:#vendor:<the text>"); it's hashed, never logged as text.
+# Refuses (exit 3) if that key posted in the last --window minutes (default 1440). With --count it also refuses
+# when the target already shows the post, and after posting checks the count went up by exactly one (else exit 4).
+. "$(dirname "$0")/lk-config"
+win=1440; cnt=
+while :; do case $1 in --window) win=$2; shift 2;; --count) cnt=$2; shift 2;; *) break;; esac; done
+key=$1; [ -n "$key" ] && [ "$2" = -- ] && [ -n "$3" ] || { sed -n 3,6p "$0"; exit 2; }
+shift 2
+log=$LK_HOME/posts.tsv; [ -f "$log" ] || printf 'epoch\tkey_sha\n' > "$log"
+h=$(printf '%s' "$key" | sha256sum 2>/dev/null || printf '%s' "$key" | shasum -a 256); h=${h%% *}
+exec 9>>"$log.lock"; flock 9   # two copies of one script can't both pass the check
+since=$(( $(date +%s) - win * 60 ))
+awk -F'\t' -v h="$h" -v s="$since" '$2 == h && $1 >= s { f = 1 } END { exit !f }' "$log" &&
+  { echo "post-once: refused, this exact post went out in the last $win min" >&2; exit 3; }
+if [ -n "$cnt" ]; then
+  n0=$(sh -c "$cnt") || { echo "post-once: count command failed; not posting" >&2; exit 2; }
+  case $n0 in ''|*[!0-9]*) echo "post-once: count command printed '$n0', not a number; not posting" >&2; exit 2;; esac
+  [ "$n0" -gt 0 ] && { echo "post-once: refused, the target already shows $n0 matching post(s)" >&2; exit 3; }
+fi
+"$@" || { r=$?; echo "post-once: post command failed (exit $r); not recorded" >&2; exit $r; }
+printf '%s\t%s\n' "$(date +%s)" "$h" >> "$log"
+if [ -n "$cnt" ]; then
+  n1=$(sh -c "$cnt"); [ "$n1" = $(( ${n0:-0} + 1 )) ] ||
+    { echo "post-once: posted, but the count went ${n0:-0} -> $n1 (expected +1): look for a double or a lost post" >&2; exit 4; }
+fi
+echo "post-once: posted once${cnt:+ (count ${n0:-0} -> $n1)}"

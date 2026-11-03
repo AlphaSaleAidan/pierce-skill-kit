@@ -22,7 +22,9 @@ jobs:
             /mnt/skills/remote-gpu-render/scripts/link_watch.sh /mnt/skills/studio-vfx/tools/encode_alpha.sh \
             /mnt/mods/brain-loop/bin/brain-loop /mnt/mods/brain-loop/bin/stuck-check /mnt/tests/brain-loop-test.sh \
             /mnt/examples/brain-loop-inputs/make-vault.sh \
-            /mnt/bin/lead-say /mnt/bin/leader /mnt/tests/lead-tools-test.sh
+            /mnt/bin/lead-say /mnt/bin/leader /mnt/tests/lead-tools-test.sh \
+            /mnt/bin/link-check /mnt/bin/go-live /mnt/bin/inbox-since /mnt/bin/post-once /mnt/bin/secret-in \
+            /mnt/hooks/send-guard.sh /mnt/hooks/lead-cap.sh /mnt/tests/strict-rules-test.sh
       - name: hook test
         run: sh tests/hook-test.sh
       - name: skill routing + recommender
@@ -50,6 +52,8 @@ jobs:
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/mods-test.sh
       - name: lead tools (report-check, tab-sweep, job watchdog, lead-say busy checks, dtach lead)
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/lead-tools-test.sh
+      - name: strict rules (link-check + send-guard, report proof gate, go-live, inbox-since, post-once, secret-in, lead-cap)
+        run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/strict-rules-test.sh
       - name: brain-loop (vault, router, plan-grade, MCP, page, hook, stuck-check) on fake data
         run: docker run --rm -v "$PWD:/kit:ro" debian:stable-slim sh /kit/tests/brain-loop-test.sh
   bridge:

@@ -28,6 +28,12 @@ c=$(jq -r '.hooks.UserPromptSubmit[0].hooks[0].command' $S)
 echo '{"session_id":"t","prompt":"yes"}' | $c | grep -q . && fail "recommender hook fired on yes"
 echo "ok: skill-recommender hooks installed once and run"
 sh mods/install.sh skill-recommender --uninstall >/dev/null
+for _ in 1 2; do sh mods/install.sh hook lead-cap >/dev/null; sh mods/install.sh hook send-guard 'mcp__mail__send|mcp__chat__post' >/dev/null; done
+[ "$(jq '.hooks.UserPromptSubmit | length' $S)" = 1 ] && [ "$(jq '.hooks.PostToolUse | length' $S)" = 1 ] && [ "$(jq '.hooks.PreToolUse | length' $S)" = 5 ] || fail "lead-cap/send-guard hooks"
+jq -e '.hooks.PostToolUse[0].matcher == "mcp__mail__send|mcp__chat__post"' $S >/dev/null || fail "send-guard matcher"
+sh mods/install.sh hook send-guard >/dev/null 2>&1 && fail "send-guard without a matcher accepted"
+for h in lead-cap send-guard; do sh mods/install.sh hook $h --uninstall >/dev/null; done
+echo "ok: lead-cap and send-guard install on both their events once, and uninstall"
 for m in agent-board model-map projects-hub statusline; do sh mods/install.sh $m --uninstall >/dev/null; done
 for h in lead-guard review-gate mail-no-links; do sh mods/install.sh hook $h --uninstall >/dev/null; done
 [ "$(jq -c . $S)" = '{"env":{"CLAUDE_CODE_PLUGIN_DIRS":""},"hooks":{"PreToolUse":[]}}' ] || fail "uninstall left: $(jq -c . $S)"

@@ -42,8 +42,11 @@ Goal: **high-quality work at a good pace.** Neither alone counts.
 - **Every** finished task, milestone, blocker, failure, or question → `report` the moment it happens:
   `report <project> <done|progress|blocked|needs-human|failed> "<result + proof in one line>" [paths/links]`
   It's the only path to the lead. Don't report to other sessions by name.
-- A `done` needs proof in the line or the paths: a commit, test output, a link you opened, a screenshot path.
-  Every report gets a cheap check, and a `done` without proof is flagged to the lead as unverified.
+- A `done` needs a proof path that exists or a link (`report` refuses it otherwise): test output, a link you
+  opened, a screenshot path. The lead opens it before telling the human.
+- Links for people: `link-check <exact url> "<text they must see>"` first. Releases to live: `go-live` (preflight,
+  auto-rollback, undo stamp). Script posts: `post-once`. Reading a channel/inbox: `inbox-since`, never a tail.
+  Need a key: ask the human to run `secret-in <file>`; never in chat.
 - Headless or long jobs run under `job run <name> -- <cmd>`: a crash or usage limit relaunches and reports.
 - Long job (>45 min) or waiting on a slot → `report <p> progress "<what, ETA>"`.
 - Blocked on a decision → `report <p> needs-human "<question + options + your recommendation>"`, then keep

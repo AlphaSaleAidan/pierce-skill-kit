@@ -82,3 +82,11 @@ BRAIN_OWNER=owner
 LK_MAC_SSH=''            # e.g. 'ssh -p 2222 -o BatchMode=yes -o ConnectTimeout=6 me@localhost'
 # How your Mac reaches the server (used inside the Terminal.app tabs it opens).
 LK_BOX_SSH=''            # e.g. 'ssh -t me@my-server'
+
+# link-check / send-guard: how long a link-check pass counts (minutes), and how long an identical send is refused.
+LK_LINK_FRESH_MIN=60
+LK_SEND_DUP_MIN=1440
+# lead-cap hook: hands-on shell commands the lead may run per turn before it must hand the work to a tab.
+LK_LEAD_CMD_CAP=6
+# secret-in writes keys here (chmod 700).
+LK_SECRETS="$HOME/.secrets"

@@ -1,0 +1,42 @@
+#!/bin/sh
+# link-check - open a link the way the person you send it to will: a real browser, logged out, fresh profile.
+# A 200 status is not enough (a page can load fine and still reject the link's params); this asserts text you
+# expect on the page and records the pass. Send hooks and helpers refuse a link with no recent pass.
+#   link-check <url> "<text the page must show>" ["<more text>" ...]   check now (exit 0 pass, 1 fail)
+#   link-check --fresh <url>                                            did this exact URL pass recently? (exit 0/1)
+# The URL is matched exactly, params included. LK_LINK_FRESH_MIN (default 60) = how long a pass counts.
+# LK_BROWSER overrides the browser (Chrome/Chromium/Edge; found on Linux and macOS by default).
+. "$(dirname "$0")/lk-config"
+log=$LK_HOME/link-checks.tsv
+[ -f "$log" ] || printf 'epoch\tresult\turl\texpected\n' > "$log"
+if [ "$1" = --fresh ]; then
+  [ -n "$2" ] || { sed -n 6p "$0"; exit 2; }
+  since=$(( $(date +%s) - ${LK_LINK_FRESH_MIN:-60} * 60 ))
+  awk -F'\t' -v u="$2" -v s="$since" '$3 == u && $1 >= s { r = $2 } END { exit r == "pass" ? 0 : 1 }' "$log"; exit
+fi
+[ $# -ge 2 ] || { sed -n 5,8p "$0"; exit 2; }
+url=$1; shift
+case $url in http://*|https://*) ;; *) echo "link-check: not an http(s) link: $url" >&2; exit 2;; esac
+b=$LK_BROWSER
+if [ -z "$b" ]; then
+  for c in chromium chromium-browser google-chrome google-chrome-stable microsoft-edge \
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" "/Applications/Chromium.app/Contents/MacOS/Chromium" \
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"; do
+    command -v "$c" >/dev/null 2>&1 && { b=$c; break; }
+  done
+fi
+[ -n "$b" ] || { echo "link-check: no Chrome/Chromium/Edge found; install one or set LK_BROWSER. A curl 200 is not a check." >&2; exit 2; }
+prof=$(mktemp -d); trap 'rm -rf "$prof"' EXIT   # fresh profile = logged out, no cookies, like the recipient
+sb=; [ "$(id -u)" = 0 ] || [ "$LK_LINK_NO_SANDBOX" = 1 ] && sb=--no-sandbox   # root / containers need it
+to=; command -v timeout >/dev/null && to="timeout ${LK_LINK_TIMEOUT:-60}"   # macOS has no timeout by default
+# shellcheck disable=SC2086
+dom=$($to "$b" --headless=new --disable-gpu $sb --user-data-dir="$prof" --no-first-run \
+  --virtual-time-budget="${LK_LINK_WAIT_MS:-8000}" --dump-dom "$url" 2>/dev/null)
+# only what a person sees: drop scripts/styles (their source can contain the expected words), then tags
+text=$(printf '%s' "$dom" | perl -0pe 's/<(script|style|noscript|template)\b.*?<\/\1\s*>/ /gis; s/<[^>]*>/ /g' | tr -s ' \t\n' ' ')
+res=pass; miss=
+for want in "$@"; do printf '%s' "$text" | grep -qiF -- "$want" || { res=fail; miss="$miss \"$want\""; }; done
+[ -n "$dom" ] || { res=fail; miss=" (the page did not load)"; }
+printf '%s\t%s\t%s\t%s\n' "$(date +%s)" "$res" "$url" "$*" | tr -d '\r' >> "$log"
+if [ $res = pass ]; then echo "pass: $url shows what you expected"; else
+  echo "FAIL: $url is missing$miss. Don't send it. Page starts: $(printf '%s' "$text" | cut -c1-160)" >&2; exit 1; fi

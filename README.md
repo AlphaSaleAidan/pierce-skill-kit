@@ -19,6 +19,9 @@
 </p>
 
 > **Latest (v0.4.3):** reports never type over you or into a login prompt (`lead-say`); `leader` views the lead with no tmux on your screen. **v0.4.2:** the brain-loop mod (Obsidian + Opus + Jev loop: a linked vault, report triage, plan grading, MCP tools) and the `tab-plan` skill. **v0.4.0:** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
+> **v0.5.0 (upgrade: `lead update`):** strict rules, each backed by a tool: `link-check` (real-browser link test before
+> any send), `go-live` (preflight + auto-rollback releases), `inbox-since`, `post-once`, `secret-in`, a proof gate on
+> `report done`, and the `lead-cap` / `send-guard` hooks. See [RULES.md](RULES.md#hard-rules-enforced-by-a-tool-v05).
 > **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -99,7 +102,7 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `claude-tab <dir> -n <name> [-p task \| -b brief.md] [-r id \| -c] [-m model] [-a account] [-f]` | open a project tab; refuses a duplicate name/folder/session (`-b`: start on a brief, `-c`: pick up the folder's last conversation, `-f`: allow a second tab in a folder) |
 | `tab-view <hub:N>` | look at one tab in this terminal without moving anyone else's view |
 | `brief-send <tab> <brief.md>` | point a tab at a brief file in one line |
-| `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed`. Each one gets a cheap second look (`report-check`): a `done` without proof, or a claimed deploy/send/merge, is tagged so the lead checks it first |
+| `report <project> <status> "<line>" [proof]` | the only way a tab tells the lead something; logged + typed into the lead. Status: `done`, `progress`, `blocked`, `needs-human` or `failed`. `done` is refused without a proof file that exists or a link. Each one gets a cheap second look (`report-check`): thin proof, or a claimed deploy/send/merge, is tagged so the lead checks it first |
 | `lead-say "<line>"` | type a line into the lead only when it's free: never over a half-typed message, a scrolled-up pane, a recent keypress, or a login/permission prompt (an alert typed into a `/login` box wipes the pasted code). Busy → queued and retried |
 | `leader` | with `LK_LEAD_DTACH=1`: view the lead straight through dtach, no tmux on your screen (your terminal scrolls natively), recent history printed first (`lead-history`) |
 | `tab-sweep [--dry-run]` | close finished tabs: last report `done`, work committed, nothing still serving, quiet for a while. Flags the ones that aren't; logs how to reopen each |
@@ -108,6 +111,11 @@ Full example: [examples/walkthrough.md](examples/walkthrough.md).
 | `lead-recall <words>` | search decisions, briefs, reports, orders and memory before asking the human again |
 | `tab-watch` | watchdog: flags tabs idle with no report (not ones waiting on you) |
 | `heavy <cmd>` | box-wide queue for CPU-heavy commands |
+| `link-check <url> "<text>"` | open the exact link in a real browser, logged out, and assert what the person must see; `send-guard` refuses links without a recent pass |
+| `go-live --live DIR --new DIR [--needs …] [--then …] [--verify …]` | release with a preflight of every later step's inputs before live is touched, auto-rollback, undo stamp (`go-live --undo <stamp>`) |
+| `<fetch> \| inbox-since <name> [--page N]` | new messages by time since the last check; flags a cut-off page (never "the last N chars") |
+| `post-once [--count cmd] <key> -- <post cmd>` | a script's post goes out once; with `--count`, checks the target before and after |
+| `secret-in <file> [VAR]` | the human copies a key and runs this in their own terminal: saved 600 in the secrets folder, only the path printed |
 | `job run <name> -- <cmd>` | run a headless job under a watchdog: relaunched after a crash or a usage-limit reset, every step reported (`job list`, `job stop`) |
 | `ssh-setup me@server` | on your own computer: password-free login plus `lead` / `tab <name>` shortcuts ([Mac](docs/macos.md), [Windows](docs/windows.md)) |
 | `claude-acct [add\|list\|run]` | separate Claude accounts for separate purposes, shared setup, per-account usage ([docs/accounts.md](docs/accounts.md)) |

@@ -25,7 +25,7 @@ set +e; claude-tab ~/alpha -n alpha2 2>/dev/null; rc=$?; set -e
 [ "$(tmux list-windows -t hub | wc -l)" = 3 ] || fail "expected 3 windows (lead + 2 tabs)"
 echo "ok: lead + 2 tabs, duplicate refused"
 # a report from inside tab alpha
-TMUX_PANE=$(tmux display -p -t hub:alpha "#{pane_id}") report alpha done "smoke report" /tmp/proof.txt
+echo ok > /tmp/proof.txt; TMUX_PANE=$(tmux display -p -t hub:alpha "#{pane_id}") report alpha done "smoke report" /tmp/proof.txt
 sleep 1
 tmux capture-pane -p -t hub:Lead | grep -q "\[REPORT done\] alpha (alpha): smoke report | /tmp/proof.txt" || fail "report did not land in the lead"
 grep -q "	alpha	done	smoke report	/tmp/proof.txt	alpha$" ~/.pierce-skill-kit/reports.tsv || fail "report not logged"
