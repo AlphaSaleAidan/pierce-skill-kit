@@ -22,7 +22,19 @@ check "install copies the router template" grep -q 'Skill router' "$HOME/.claude
 echo '# mine' > "$HOME/.claude/skill-router.md"; sh "$KIT/mods/route/install.sh" >/dev/null 2>&1
 check "re-install keeps your router" grep -q '^# mine' "$HOME/.claude/skill-router.md"
 
-mkdir -p "$HOME/.claude-work" "$HOME/.claude-alpha" "$HOME/.claude-fresh"
+# no numbers at all yet: say so, mark no winner, auto takes the first account and says why
+mkdir -p "$HOME/.claude-work"; : > "$HOME/.claude-work/.claude.json"
+printf '\n' | claude-pick > "$T/menu0" 2>&1 || true
+check "no data: menu says how to get numbers" grep -q 'No usage numbers yet: install the usage status line (sh mods/usage/install.sh)' "$T/menu0"
+check "no data: no account marked least used" sh -c "! grep -q 'least used' '$T/menu0'"
+check "no data: auto starts the first account (main)" [ "$(claude-pick auto 2>/dev/null)" = "CFG=unset ARGS=" ]
+check "no data: auto says why" sh -c "claude-pick auto 2>&1 >/dev/null | grep -q 'No usage numbers yet.*first account'"
+
+# accounts: folders with a login (.credentials.json or .claude.json) or made by claude-acct add; never tool state
+mkdir -p "$HOME/.claude-alpha" "$HOME/.claude-fresh" "$HOME/.claude-flow" "$HOME/.claude-mem"
+echo '{}' > "$HOME/.claude-alpha/.credentials.json"; : > "$HOME/.claude-fresh/.kit-account"; echo '{}' > "$HOME/.claude-flow/state.json"
+check "claude-acct names skips ~/.claude-flow and other non-account folders" \
+  [ "$(claude-acct names | tr '\n' ' ')" = "main alpha fresh work " ]
 # usage written by the real status line, one draw per account (rate_limits as Claude Code passes them)
 SL=$KIT/mods/statusline/statusline.sh; future=$(( $(date +%s) + 86400 )); past=$(( $(date +%s) - 60 ))
 draw() { printf '{"workspace":{"current_dir":"%s"},"model":{"display_name":"Opus"},"rate_limits":%s}' "$T" "$2" |
@@ -40,8 +52,11 @@ check "auto starts the least-used account and passes args" \
 check "menu: Enter = least used" [ "$(printf '\n' | claude-pick 2>/dev/null | grep -o 'CFG=[^ ]*')" = "CFG=$HOME/.claude-alpha" ]
 check "menu: 3 = third least used (main)" [ "$(printf '3\n' | claude-pick 2>/dev/null | grep -o 'CFG=[^ ]*')" = "CFG=unset" ]
 printf '\n' | claude-pick > "$T/menu" 2>&1 || true
-check "menu shows week + 5h and marks the least used" grep -qE '1\) alpha +week 20% +5h 10% +<- least used' "$T/menu"
-check "menu shows ? for an account with no data" grep -qE 'fresh +week \? +5h \?' "$T/menu"
+check "menu shows week + 5h + age and marks the least used" grep -qE '1\) alpha +week 20% +5h 10% +\(just now\) +<- least used' "$T/menu"
+check "menu never lists ~/.claude-flow" sh -c "! grep -qE 'flow|mem' '$T/menu' && ! claude-pick order | grep -q flow"
+check "menu has data: no 'no usage numbers' line" sh -c "! grep -q 'No usage numbers' '$T/menu'"
+check "menu shows ? for an account with no data" grep -qE 'fresh +week \? +5h \? *$' "$T/menu"
+check "menu temp file comes from mktemp, not a fixed /tmp name" sh -c "grep -q mktemp '$KIT/mods/route/claude-pick' && ! grep -q 'claude-pick\.\\\$\\\$' '$KIT/mods/route/claude-pick'"
 rc=0; printf 'w x\n' | claude-pick >/dev/null 2>&1 || true; check "menu ignores non-numbers (no sed tricks)" [ ! -e x ]
 rc=0; printf '9\n' | claude-pick > "$T/bad" 2>&1 || rc=$?
 check "menu refuses a bad number (exit 2, starts nothing)" sh -c "[ $rc = 2 ] && ! grep -q CFG= '$T/bad'"

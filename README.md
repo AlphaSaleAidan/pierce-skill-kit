@@ -135,9 +135,9 @@ Plus recommended third-party skills (linked, not copied, with license and instal
 ## Mods
 Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
 (live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
-projects, sessions, PRs, services), **statusline**, **bridge** (Claude Code on your own computer talks to the lead
+projects, sessions, PRs, services), **statusline** (with 5h + weekly usage bars for every account: `sh mods/usage/install.sh`), **bridge** (Claude Code on your own computer talks to the lead
 over SSH, plus a file store for big files both ways: [docs/bridge.md](docs/bridge.md#file-store-big-files-both-ways)), **skill-recommender** (asks "Switch to `<skill>`?" when an installed
-skill fits a tough task better), **usage** (5h + weekly bars for every account in the status line), **route**
+skill fits a tough task better), **route**
 (`claude-pick`: start Claude on your least-used account), **brain-loop** (the loop below), the **lead-guard**, **review-gate** and
 **mail-no-links** hooks, and `mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping
 Rope, the usage MCP, Ruflo + overlay).

@@ -6,10 +6,11 @@
 #   bridge sync [--watch [N]]     mirror the shared context folder both ways (--watch: every N s, default 60)
 #   bridge share <path> < file    write one file into the context folder, then sync
 #   bridge pull [path]            sync, then list the context folder (or print one file)
-#   bridge files                  list what sync would send, after the deny-list and size caps
+#   bridge sync --list            list what sync would send, after the deny-list and size caps
+#   bridge files [path]           the file store: what's the same, to push, to pull, or changed on both sides
 #   bridge files setup [folder]   your file store folder (default ~/PierceFiles); files there can be big (100 MB each)
 #   bridge files push [path]      send new/changed files to the server (a path: only that; a file elsewhere: copied in)
-#   bridge files pull [path]      get new/changed files from the server (a replaced copy is kept in ~/pierce-bridge/files-trash)
+#   bridge files pull [path]      get new/changed files from the server (changed on both sides: keeps both)
 #   bridge files share <path> [minutes]   push, then a time-limited public link (only if the server owner turned sharing on)
 # On the server:  bridge reply "<text>"  (answer the local session)   bridge log  (recent bridge actions)
 # The same file, installed on the server as ~/.local/bin/bridge-serve, is the SSH entry point / forced command.
@@ -59,9 +60,10 @@ pack() { # pack <dir> <list> <out.tar>: tar the listed files, refusing anything 
 unpack() { # unpack <tar> <dir>: plain uncompressed tar of files and folders, caps checked BEFORE anything is extracted
   if [ -n "$(head -c 512 "$1" | tr -d '\000' | head -c 1)" ] && [ "$(dd if="$1" bs=1 skip=257 count=5 2>/dev/null)" != ustar ]; then
     echo "bridge: refusing archive: not a plain tar (compressed archives are refused)" >&2; return 1; fi
-  tar -tvf "$1" > "$1.v" 2>/dev/null || { echo "bridge: not a valid archive" >&2; return 1; }
+  tq=; tar --version 2>/dev/null | grep -q GNU && tq=--quoting-style=literal   # GNU tar escapes é as \303\251 outside a UTF-8 locale
+  tar $tq -tvf "$1" > "$1.v" 2>/dev/null || { echo "bridge: not a valid archive" >&2; return 1; }
   if cut -c1 "$1.v" | grep -qv '^[-d]$'; then echo "bridge: refusing archive: it holds links or special files" >&2; return 1; fi
-  if tar -tf "$1" | grep -qE '^/|(^|/)\.\.(/|$)|\\|:'; then echo "bridge: refusing archive: unsafe paths" >&2; return 1; fi
+  if tar $tq -tf "$1" | grep -qE '^/|(^|/)\.\.(/|$)|\\|:'; then echo "bridge: refusing archive: unsafe paths" >&2; return 1; fi
   # sizes from the listing: GNU tar puts user/group in field 2 and the size in 3; bsdtar has links, user, group, size in 5
   why=$(awk -v mf=$MAX_FILE -v mt=$MAX_TOTAL -v me=$MAX_ENTRIES '{ s = ($2 ~ /\//) ? $3 : $5; n++; t += s; if (s + 0 > mf) big = 1 }
     END { if (n > me) print "over " me " entries"; else if (big) print "a file over the " mf / 1048576 " MB cap"; else if (t > mt) print "over the " mt / 1048576 " MB total cap" }' "$1.v")
@@ -264,48 +266,88 @@ do_sync() {
 }
 
 # ---------- the file store (your side): BRIDGE_FILES (default ~/PierceFiles) ----------
-files_cfg() { load_config; FILES=$BRIDGE_FILES; mkdir -p "$FILES" || die "can't make $FILES"; bigcaps; }
+files_cfg() { load_config; FILES=$BRIDGE_FILES; BASE=$DIR/files-base.tsv; mkdir -p "$FILES" || die "can't make $FILES"; bigcaps; }
 offline() { # the ssh call failed: say why in plain words
   case $(cat "$1" 2>/dev/null) in *"not a bridge action"*) die "the server has an older bridge. Update it once:  bridge setup $BRIDGE_VPS --name $BRIDGE_NAME";;
     *refused:*) die "the server said no (above)";; esac
   die "can't reach $BRIDGE_VPS (offline, asleep or no network). Nothing changed; your files are still in $FILES. Try again later."; }
 scoped() { [ -z "$scope" ] || case $1 in "$scope"|"$scope"/*) ;; *) return 1;; esac; }
-files_scope() { # files_scope [path]: set $scope (relative to the store); a file from elsewhere is copied into the store first
-  scope=; [ -n "${1:-}" ] || return 0
-  if [ -f "$1" ] && a=$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) false;; esac; then
-    b=$(basename "$1"); ! denied "$b" || die "refused: $b is on the deny-list (secrets, keys, .env)"
-    [ "$(wc -c < "$1")" -le $MAX_FILE ] || die "$b is over the 100 MB cap"
-    keep "$FILES" "$b" "$DIR/files-trash"; cp "$1" "$FILES/$b" && echo "copied $b into $FILES"; scope=$b; return 0
+hsize() { awk -v b="$1" 'BEGIN { if (b >= 1048576) printf "%.1f MB", b / 1048576; else if (b >= 1024) printf "%d KB", b / 1024; else printf "%d bytes", b }'; }
+files_scope() { # files_scope push|pull [path]: set $scope (relative to the store). push: a file from elsewhere is copied in first
+  scope=; [ -n "${2:-}" ] || return 0
+  if [ -f "$2" ] && a=$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) false;; esac; then
+    [ "$1" = push ] || die "$2 is not in $FILES. Pull takes a path inside the store, e.g. bridge files pull clients"
+    b=$(basename "$2"); ! denied "$b" || die "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer"
+    [ "$(wc -c < "$2")" -le $MAX_FILE ] || die "$b is over the 100 MB cap"
+    [ -f "$FILES/$b" ] && echo "replaced $b in $FILES (old copy in $DIR/files-trash)"
+    keep "$FILES" "$b" "$DIR/files-trash"; cp "$2" "$FILES/$b" && echo "copied $b into $FILES"; scope=$b; return 0
   fi
-  [ -e "$1" ] && a=$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) scope=${a#"$r"/}; return 0;; esac
-  scope=${1%/}; case $scope in /*|*..*|*\\*) die "refused path: $1";; esac
+  [ -e "$2" ] && a=$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) scope=${a#"$r"/}; return 0;; esac
+  scope=${2%/}; case $scope in /*|*..*|*\\*) die "refused path: $2";; esac
+}
+files_plan() { # files_plan: fills $t/mine, $t/srv, $t/plan (action<TAB>path: same|up|down|both), $t/skip
+  remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
+  manifest "$FILES" > "$t/mine" 2> "$t/skip"
+  touch "$BASE"
+  # base = the hash both sides last agreed on: only the side that changed since then wins; both changed = conflict
+  awk -F'\t' 'FILENAME == ARGV[1] { m[$1] = $2; a[$1] = 1; next } FILENAME == ARGV[2] { s[$1] = $2; a[$1] = 1; next } { o[$1] = $2 }
+    END { for (f in a) { l = m[f]; v = s[f]; b = o[f]
+      x = (l == v) ? "same" : (v == "") ? "up" : (l == "") ? "down" : (l == b) ? "down" : (v == b) ? "up" : "both"; print x "\t" f } }' \
+    "$t/mine" "$t/srv" "$BASE" | LC_ALL=C sort -t "$(printf '\t')" -k2 | while IFS="$(printf '\t')" read -r x f; do scoped "$f" && printf '%s\t%s\n' "$x" "$f"; done > "$t/plan"
+}
+agree() { # agree <manifest> <list of paths>: record those files' hashes as agreed by both sides
+  awk -F'\t' 'FILENAME == ARGV[1] { w[$0] = 1; next } FILENAME == ARGV[2] { if ($1 in w) n[$1] = $2; next }
+    !($1 in n) { print } END { for (f in n) print f "\t" n[f] }' "$2" "$1" "$BASE" > "$BASE.new" && mv "$BASE.new" "$BASE"
+}
+warn_secrets() { # say once per file what stays home
+  touch "$DIR/files-warned"
+  ( cd "$FILES" && find . -type f | sed 's|^\./||' ) | while IFS= read -r f; do
+    scoped "$f" && denied "$f" && ! grep -qxF -- "$f" "$DIR/files-warned" && { echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; printf '%s\n' "$f" >> "$DIR/files-warned"; }
+  done; }
+files_status() {
+  t=$(mktemp -d); files_scope pull "${1:-}"; files_plan
+  cat "$t/skip" >&2
+  [ -s "$t/plan" ] || { echo "the file store is empty: put files in $FILES, then bridge files push"; cleanup "$t"; return 0; }
+  awk -F'\t' '{ w = ($1 == "same") ? "same     " : ($1 == "up") ? "to push  " : ($1 == "down") ? "to pull  " : "CHANGED BOTH SIDES (pull keeps both)  "; print "  " w " " $2 }' "$t/plan"
+  cleanup "$t"
 }
 files_push() {
-  files_scope "${1:-}"; t=$(mktemp -d)
-  remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
-  ( cd "$FILES" && find . -type f | sed 's|^\./||' ) | while IFS= read -r f; do   # say what stays home, never silently
-    scoped "$f" && denied "$f" && echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; done
-  manifest "$FILES" > "$t/mine"
-  while IFS="$(printf '\t')" read -r f h; do scoped "$f" && ! grep -qxF -- "$f	$h" "$t/srv" && printf '%s\n' "$f"; done < "$t/mine" > "$t/up"
-  [ -s "$t/up" ] || { [ -n "${quiet:-}" ] || echo "up to date: the server already has ${scope:-everything in $FILES}"; cleanup "$t"; return 0; }
+  files_scope push "${1:-}"; t=$(mktemp -d); files_plan; warn_secrets
+  cat "$t/skip" >&2
+  awk -F'\t' '$1 == "both" { print $2 }' "$t/plan" | while IFS= read -r f; do
+    echo "bridge: not sent: $f changed here AND on the server. Run  bridge files pull  first (it keeps both copies)" >&2; done
+  awk -F'\t' '$1 == "up" { print $2 }' "$t/plan" > "$t/up"
+  awk -F'\t' '$1 == "same" { print $2 }' "$t/plan" > "$t/same"; [ -s "$t/same" ] && agree "$t/mine" "$t/same"
+  if [ ! -s "$t/up" ]; then
+    sk=$(grep -c 'over the' "$t/skip"); bo=$(grep -c '^both' "$t/plan")
+    [ -n "${quiet:-}" ] || if [ "$sk" -gt 0 ] || [ "$bo" -gt 0 ]; then echo "nothing else to send"; else echo "up to date: the server already has ${scope:-everything in $FILES}"; fi
+    cleanup "$t"; return 0
+  fi
+  while IFS= read -r f; do echo "  sending $f ($(hsize "$(wc -c < "$FILES/$f")"))"; done < "$t/up"
   pack "$FILES" "$t/up" "$t/up.tar" || { cleanup "$t"; exit 1; }
   remote files-put "$BRIDGE_NAME" < "$t/up.tar" || { cleanup "$t"; die "push failed"; }
+  agree "$t/mine" "$t/up"
   cleanup "$t"
 }
 files_pull() {
-  files_scope "${1:-}"; t=$(mktemp -d)
-  remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
-  manifest "$FILES" > "$t/mine" 2>/dev/null
-  while IFS="$(printf '\t')" read -r f h; do scoped "$f" && ! grep -qxF -- "$f	$h" "$t/mine" && printf '%s\n' "$f"; done < "$t/srv" > "$t/want"
+  files_scope pull "${1:-}"; t=$(mktemp -d); files_plan
+  awk -F'\t' '$1 == "down" || $1 == "both" { print $2 }' "$t/plan" > "$t/want"
+  awk -F'\t' '$1 == "same" { print $2 }' "$t/plan" > "$t/same"; [ -s "$t/same" ] && agree "$t/srv" "$t/same"
   [ -s "$t/want" ] || { echo "up to date: nothing new on the server"; cleanup "$t"; return 0; }
   remote files-get < "$t/want" > "$t/down.tar" || { cleanup "$t"; die "pull failed"; }
   unpack "$t/down.tar" "$t/d" || { cleanup "$t"; exit 1; }
-  list_files "$t/d" > "$t/got"; n=0
+  list_files "$t/d" > "$t/got"; n=0; : > "$t/ok"
   while IFS= read -r f; do
     safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link here; not written" >&2; continue; }
-    [ -f "$FILES/$f" ] && echo "replaced $f (your old copy is in $DIR/files-trash)"
-    keep "$FILES" "$f" "$DIR/files-trash" && mkdir -p "$(dirname "$FILES/$f")" && cp "$t/d/$f" "$FILES/$f" && n=$((n + 1))
+    if grep -qxF -- "both	$f" "$t/plan"; then   # changed on both sides: the server copy takes the name, yours moves beside it
+      d=$(dirname "$f"); b=$(basename "$f"); case $b in ?*.*) st=${b%.*}; ex=.${b##*.};; *) st=$b; ex=;; esac
+      c=$st.conflict-$BRIDGE_NAME-$(date -u +%Y%m%dT%H%M%SZ)$ex; [ "$d" = . ] || c=$d/$c
+      mv "$FILES/$f" "$FILES/$c" && echo "  kept both: $f (yours: $c)"
+    else keep "$FILES" "$f" "$DIR/files-trash"; fi
+    mkdir -p "$(dirname "$FILES/$f")" && cp "$t/d/$f" "$FILES/$f" && n=$((n + 1)) && printf '%s\n' "$f" >> "$t/ok"
+    grep -qxF -- "both	$f" "$t/plan" || echo "  got $f ($(hsize "$(wc -c < "$FILES/$f")"))"
   done < "$t/got"
+  [ -s "$t/ok" ] && agree "$t/srv" "$t/ok"
   echo "got $(nfiles $n) from the server, in $FILES"
   cleanup "$t"
 }
@@ -373,6 +415,7 @@ main() {
       if [ -n "$new" ]; then printf '%s\n' "$new"; else echo "(no new messages)"; fi
       wc -l < "$DIR/inbox.txt" | tr -d ' ' > "$DIR/.read";;
     sync) load_config
+      if [ "${1:-}" = --list ]; then list_files "$BRIDGE_CONTEXT"; exit; fi
       if [ "${1:-}" = --watch ]; then n=${2:-60}; echo "syncing every $n s (Ctrl+C stops)"; while :; do do_sync; sleep "$n"; done; fi
       do_sync;;
     share) load_config; p=${1:-}; safe_rel "$p" || die "refused path: $p (empty, absolute, .. or on the deny-list)"
@@ -384,8 +427,7 @@ main() {
       else list_files "$BRIDGE_CONTEXT"; fi;;
     files) sub=${1:-}; [ $# -gt 0 ] && shift
       case $sub in
-        '') load_config; echo "(context folder: what bridge sync would send. For the file store: bridge files push | pull | share)" >&2
-          list_files "$BRIDGE_CONTEXT";;
+        ''|status) files_cfg; files_status "${1:-}";;
         setup) load_config; f=${1:-$HOME/PierceFiles}; mkdir -p "$f" && f=$(cd "$f" && pwd -P) || die "can't use $f"
           grep -v '^BRIDGE_FILES=' "$DIR/config" > "$DIR/config.new"; printf 'BRIDGE_FILES=%s\n' "$f" >> "$DIR/config.new"; mv "$DIR/config.new" "$DIR/config"
           BRIDGE_FILES=$f; FILES=$f; t=$(mktemp)
@@ -403,7 +445,7 @@ main() {
       printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$(printf '%s' "$*" | tr '\r\n\t' '   ')" >> "$STATE/outbox.tsv"
       slog "reply"; echo "queued for the local session (it shows up in: bridge inbox)";;
     log) server_env; tail -n "${1:-20}" "$LK_HOME/bridge.log" 2>/dev/null;;
-    *) sed -n 2,15p "$0"; exit 2;;
+    *) sed -n 2,16p "$0"; exit 2;;
   esac
 }
 main "$@"

@@ -117,7 +117,7 @@ echo "== deny-list (both directions)"
 DENY='.env .env.local x.pem x.key id_ed25519 id_rsa.pub my-secret.txt SECRETS.md x.p12 x.pfx .ssh/config .secrets/a.txt credentials.json api_token.txt .git/config deep/dir/.env .netrc .npmrc .pypirc .pgpass .git-credentials .aws/config .docker/config.json kubeconfig vault.kdbx putty.ppk notes.gpg key.asc .htpasswd my-credential.txt'
 mk="for f in $DENY ok.md; do mkdir -p \$(dirname \$B/\$f) && echo sensitive > \$B/\$f; done"
 L "B=$LC/l; $mk"; V "B=$SH/v; $mk"
-files=$(L 'bridge files')
+files=$(L 'bridge sync --list')
 leak=0; for f in $DENY; do echo "$files" | grep -qxF "l/$f" && { echo "  client would send l/$f"; leak=1; }; done
 [ $leak = 0 ] && echo "$files" | grep -qx l/ok.md && ok "client-side filter: no deny-listed file is queued" || no "client-side filter"
 L 'bridge sync' >/dev/null 2>&1
@@ -283,15 +283,31 @@ t "push: laptop -> server" V "grep -qx hello $FS/docs/a.md"
 t "push: a 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(L "sha256sum $LF/big.bin" | cut -c1-64)" ]'
 t "push never sends .env, .ssh, tokens or keys" V "test ! -e $FS/.env && test ! -e $FS/.ssh && test ! -e $FS/api-token.txt && test ! -e $FS/srv.pem"
 t "push again: nothing to push" sh -c 'echo "$1" | grep -q "up to date: the server"' _ "$(L 'bridge files push' 2>&1)"
+L "echo cv > '$LF/Résumé 2026.md'" && L 'bridge files push' >/dev/null 2>&1
+t "push: a non-English file name arrives" V "grep -qx cv '$FS/Résumé 2026.md'"
+V "echo bericht > '$FS/Übersicht 日本.md'" && L 'bridge files pull' >/dev/null 2>&1
+t "pull: a non-English file name arrives" L "grep -qx bericht '$LF/Übersicht 日本.md'"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"
 t "pull fetches only what changed" sh -c 'echo "$1" | grep -q "got 1 file from the server"' _ "$o"
+V "echo claude-v2 > $FS/out/r.md"
+L 'bridge files pull' >/dev/null 2>&1
+t "pull: a file only the server changed is replaced, old copy in files-trash" L "grep -qx claude-v2 $LF/out/r.md && cat ~/pierce-bridge/files-trash/*/out/r.md | grep -qx from-claude"
 L "echo local-edit > $LF/docs/a.md"; V "echo server-edit > $FS/docs/a.md"
+o=$(L 'bridge files' 2>&1)
+t "bridge files shows a file changed on both sides" sh -c 'echo "$1" | grep -q "CHANGED BOTH SIDES.*docs/a.md"' _ "$o"
+o=$(L 'bridge files push' 2>&1)
+t "push won't overwrite a file changed on both sides" sh -c 'echo "$1" | grep -q "not sent: docs/a.md changed here AND on the server"' _ "$o"
+t "the server copy is untouched" V "grep -qx server-edit $FS/docs/a.md"
 o=$(L 'bridge files pull' 2>&1)
-t "pull takes the server copy" L "grep -qx server-edit $LF/docs/a.md"
-t "pull keeps the replaced local copy in files-trash" L 'cat ~/pierce-bridge/files-trash/*/docs/a.md | grep -qx local-edit'
-t "pull says where the old copy went" sh -c 'echo "$1" | grep -q files-trash' _ "$o"
+t "pull: changed on both sides keeps both (server copy takes the name)" L "grep -qx server-edit $LF/docs/a.md && cat $LF/docs/a.conflict-laptop-*.md | grep -qx local-edit"
+t "pull says it kept both" sh -c 'echo "$1" | grep -q "kept both: docs/a.md (yours: docs/a.conflict-laptop-"' _ "$o"
+L "rm -f $LF/docs/a.conflict-laptop-*.md"
+o=$(L 'bridge files pull /etc/hostname' 2>&1)
+t "pull of a file outside the store is refused (nothing copied in)" sh -c 'echo "$1" | grep -q "not in /root/PierceFiles"' _ "$o"
+t "  ... and nothing was copied in" L "test ! -e $LF/hostname"
+t "push shows each file as it goes" sh -c 'echo "$1" | grep -q "sending docs/a.md"' _ "$(L "echo v > $LF/docs/a.md; bridge files push" 2>&1)"
 L "echo laptop-v3 > $LF/docs/a.md && bridge files push" >/dev/null 2>&1
 t "push replaces the server copy" V "grep -qx laptop-v3 $FS/docs/a.md"
 t "push keeps the replaced server copy in files-trash" V 'cat ~/.pierce-skill-kit/bridge/files-trash/*/docs/a.md | grep -qx server-edit'
@@ -410,14 +426,16 @@ W 'mkdir -p /root/WinFiles/sub && echo win-file > /root/WinFiles/sub/w.md && ech
 o=$(W "$P files push" 2>&1)
 t "ps1 push: windows -> server" V "grep -qx win-file $FS/sub/w.md"
 t "ps1 push never sends .env" V "test ! -e $FS/.env"
+W "echo winv > '/root/WinFiles/Résumé win.md'" && W "$P files push" >/dev/null 2>&1
+t "ps1 push: a non-English file name arrives" V "grep -qx winv '$FS/Résumé win.md'"
 t "ps1 push says .env stays home" sh -c 'echo "$1" | grep -q "kept on this computer.*: \.env"' _ "$o"
 o=$(W "$P files pull" 2>&1)
-t "ps1 pull: server -> windows" W 'grep -qx from-claude /root/WinFiles/out/r.md && grep -qx laptop-v3 /root/WinFiles/docs/a.md'
+t "ps1 pull: server -> windows" W 'grep -qx claude-v2 /root/WinFiles/out/r.md && grep -qx laptop-v3 /root/WinFiles/docs/a.md'
 t "ps1 pull: the 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(W "sha256sum /root/WinFiles/big.bin" | cut -c1-64)" ]'
 t "ps1 push again: nothing to push" sh -c 'echo "$1" | grep -q "up to date: the server"' _ "$(W "$P files push" 2>&1)"
 V "echo server-new > $FS/sub/w.md"; W 'echo win-edit > /root/WinFiles/sub/w.md'
 W "$P files pull sub" >/dev/null 2>&1
-t "ps1 pull keeps the replaced copy in files-trash" W 'grep -qx server-new /root/WinFiles/sub/w.md && cat /root/pierce-bridge/files-trash/*/sub/w.md | grep -qx win-edit'
+t "ps1 pull: changed on both sides keeps both" W 'grep -qx server-new /root/WinFiles/sub/w.md && cat /root/WinFiles/sub/w.conflict-winbox-*.md | grep -qx win-edit'
 W 'echo from-win-desktop > /tmp/wout.txt'
 W "$P files push /tmp/wout.txt" >/dev/null 2>&1
 t "ps1 push <file elsewhere> copies it in and sends it" V "grep -qx from-win-desktop $FS/wout.txt"

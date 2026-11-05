@@ -6,10 +6,11 @@
 #   bridge sync [--watch [N]]     mirror the shared context folder both ways (--watch: every N s, default 60)
 #   bridge share <path>           write one file (content on stdin) into the context folder, then sync
 #   bridge pull [path]            sync, then list the context folder (or print one file)
-#   bridge files                  list what sync would send, after the deny-list and size caps
+#   bridge sync --list            list what sync would send, after the deny-list and size caps
+#   bridge files [path]           the file store: what's the same, to push, to pull, or changed on both sides
 #   bridge files setup [folder]   your file store folder (default ~\PierceFiles); files there can be big (100 MB each)
 #   bridge files push [path]      send new/changed files to the server (a path: only that; a file elsewhere: copied in)
-#   bridge files pull [path]      get new/changed files from the server (a replaced copy is kept in pierce-bridge\files-trash)
+#   bridge files pull [path]      get new/changed files from the server (changed on both sides: keeps both)
 #   bridge files share <path> [minutes]   push, then a time-limited public link (only if the server owner turned sharing on)
 $ErrorActionPreference = 'Stop'
 try { [Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
@@ -121,7 +122,8 @@ function Invoke-Ssh([string]$hostSpec, [string]$remoteCmd, [string]$key, [string
 }
 
 function Invoke-Remote($c, [string]$cmd, [string]$InFile, [byte[]]$InBytes, [string]$OutFile) {
-  Invoke-Ssh $c.BRIDGE_VPS "~/.local/bin/bridge-serve $cmd" $c.BRIDGE_KEY $InFile $InBytes $OutFile
+  $serve = if ($env:BRIDGE_SERVE) { $env:BRIDGE_SERVE } else { '~/.local/bin/bridge-serve' }   # BRIDGE_SERVE: the Windows test pack's throwaway copy
+  Invoke-Ssh $c.BRIDGE_VPS "$serve $cmd" $c.BRIDGE_KEY $InFile $InBytes $OutFile
 }
 
 function Sync-Context($c) {
@@ -174,16 +176,21 @@ function Get-ServerFiles($c) {
   return $h
 }
 function Test-InScope([string]$f, [string]$scope) { return (-not $scope -or $f -eq $scope -or $f.StartsWith("$scope/")) }
-function Get-Scope($c, [string]$p) {  # a path inside the store -> relative; a file elsewhere is copied in first
+$PathCmp = if ($env:OS -eq 'Windows_NT') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
+function Get-Count([int]$n) { if ($n -eq 1) { return '1 file' } return "$n files" }
+function Get-Size([long]$b) { if ($b -ge 1MB) { return '{0:N1} MB' -f ($b / 1MB) } if ($b -ge 1KB) { return "$([Math]::Floor($b / 1KB)) KB" } return "$b bytes" }
+function Get-Scope($c, [string]$mode, [string]$p) {  # a path inside the store -> relative; push: a file elsewhere is copied in first
   if (-not $p) { return '' }
   $root = [IO.Path]::GetFullPath($c.BRIDGE_FILES).TrimEnd('\', '/')
   if (Test-Path -LiteralPath $p) {
     $full = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\', '/')
-    if ($full.StartsWith($root + [IO.Path]::DirectorySeparatorChar)) { return $full.Substring($root.Length + 1).Replace('\', '/') }
+    if ($full.StartsWith($root + [IO.Path]::DirectorySeparatorChar, $PathCmp)) { return $full.Substring($root.Length + 1).Replace('\', '/') }
     if (Test-Path -LiteralPath $full -PathType Leaf) {
+      if ($mode -ne 'push') { Fail "$p is not in $root. Pull takes a path inside the store, e.g. bridge files pull clients" }
       $b = Split-Path $full -Leaf
-      if (Test-Denied $b) { Fail "refused: $b is on the deny-list (secrets, keys, .env)" }
+      if (Test-Denied $b) { Fail "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer" }
       if ((Get-Item -LiteralPath $full -Force).Length -gt $MaxFile) { Fail "$b is over the 100 MB cap" }
+      if (Test-Path -LiteralPath (Join-Path $root $b)) { [Console]::Out.WriteLine("replaced $b in $root (old copy in $(Join-Path $Dir 'files-trash'))") }
       Save-Old $root $b; Copy-Item -LiteralPath $full -Destination (Join-Path $root $b) -Force
       [Console]::Out.WriteLine("copied $b into $root"); return $b
     }
@@ -192,40 +199,91 @@ function Get-Scope($c, [string]$p) {  # a path inside the store -> relative; a f
   if ($s.StartsWith('/') -or $s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }
   return $s
 }
-function Get-Count([int]$n) { if ($n -eq 1) { return '1 file' } return "$n files" }
-function Push-Files($c, [string]$p, [bool]$quiet = $false) {
-  $script:Scope = Get-Scope $c $p; $root = $c.BRIDGE_FILES
-  $full = (Resolve-Path -LiteralPath $root).ProviderPath.TrimEnd('\', '/')
-  foreach ($f in Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue) {   # say what stays home
-    $rel = $f.FullName.Substring($full.Length + 1).Replace('\', '/')
-    if ((Test-InScope $rel $script:Scope) -and (Test-Denied $rel)) { [Console]::Error.WriteLine("bridge: kept on this computer (looks like a secret or key): $rel") }
+function Read-Base {
+  $h = New-Object 'Collections.Generic.Dictionary[string,string]'; $p = Join-Path $Dir 'files-base.tsv'
+  if (Test-Path $p) { foreach ($l in [IO.File]::ReadAllLines($p, $Utf8)) { $i = $l.IndexOf("`t"); if ($i -gt 0) { $h[$l.Substring(0, $i)] = $l.Substring($i + 1) } } }
+  return $h
+}
+function Save-Agreed($manifest, $paths) {  # record those files' hashes as agreed by both sides
+  $b = Read-Base; foreach ($f in $paths) { if ($manifest.ContainsKey($f)) { $b[$f] = $manifest[$f] } }
+  [IO.File]::WriteAllLines((Join-Path $Dir 'files-base.tsv'), [string[]]@($b.Keys | ForEach-Object { "$_`t$($b[$_])" }), $Utf8)
+}
+function Get-Plan($c, [string]$scope) {  # same | up | down | both, for every path in scope
+  $script:Srv = Get-ServerFiles $c; $script:Mine = Get-Manifest $c.BRIDGE_FILES; $base = Read-Base
+  $all = New-Object 'Collections.Generic.SortedSet[string]' ([StringComparer]::Ordinal)
+  foreach ($k in $script:Srv.Keys) { [void]$all.Add($k) }; foreach ($k in $script:Mine.Keys) { [void]$all.Add($k) }
+  $plan = New-Object Collections.Generic.List[object]
+  foreach ($f in $all) {
+    if (-not (Test-InScope $f $scope)) { continue }
+    $l = if ($script:Mine.ContainsKey($f)) { $script:Mine[$f] } else { '' }; $v = if ($script:Srv.ContainsKey($f)) { $script:Srv[$f] } else { '' }
+    $o = if ($base.ContainsKey($f)) { $base[$f] } else { '' }
+    $a = if ($l -eq $v) { 'same' } elseif (-not $v) { 'up' } elseif (-not $l) { 'down' } elseif ($l -eq $o) { 'down' } elseif ($v -eq $o) { 'up' } else { 'both' }
+    $plan.Add([pscustomobject]@{ A = $a; F = $f })
   }
-  $srv = Get-ServerFiles $c; $mine = Get-Manifest $root
-  $up = [string[]]@($mine.Keys | Where-Object { (Test-InScope $_ $script:Scope) -and -not ($srv.ContainsKey($_) -and $srv[$_] -eq $mine[$_]) } | Sort-Object -CaseSensitive)
-  if (-not $up.Count) { if (-not $quiet) { Write-Output "up to date: the server already has $(if ($script:Scope) { $script:Scope } else { "everything in $root" })" }; return }
+  return ,$plan
+}
+function Get-StoreNotes($c, [string]$scope) {  # say once per file what stays home; count files over the cap
+  $full = (Resolve-Path -LiteralPath $c.BRIDGE_FILES).ProviderPath.TrimEnd('\', '/'); $wp = Join-Path $Dir 'files-warned'
+  $warned = if (Test-Path $wp) { @([IO.File]::ReadAllLines($wp, $Utf8)) } else { @() }; $big = 0
+  foreach ($f in Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue) {
+    $rel = $f.FullName.Substring($full.Length + 1).Replace('\', '/')
+    if (-not (Test-InScope $rel $scope)) { continue }
+    if (Test-Denied $rel) { if ($warned -notcontains $rel) { [Console]::Error.WriteLine("bridge: kept on this computer (looks like a secret or key): $rel"); [IO.File]::AppendAllText($wp, "$rel`n", $Utf8) } }
+    elseif ($f.Length -gt $MaxFile) { $big++ }
+  }
+  return $big
+}
+function Show-Status($c, [string]$p) {
+  $scope = Get-Scope $c 'pull' $p; $plan = Get-Plan $c $scope
+  if (-not $plan.Count) { Write-Output "the file store is empty: put files in $($c.BRIDGE_FILES), then bridge files push"; return }
+  foreach ($x in $plan) { $w = switch ($x.A) { 'same' { 'same     ' } 'up' { 'to push  ' } 'down' { 'to pull  ' } default { 'CHANGED BOTH SIDES (pull keeps both)  ' } }; Write-Output "  $w $($x.F)" }
+}
+function Push-Files($c, [string]$p, [bool]$quiet = $false) {
+  $script:Scope = Get-Scope $c 'push' $p; $root = $c.BRIDGE_FILES
+  $plan = Get-Plan $c $script:Scope; $big = Get-StoreNotes $c $script:Scope
+  $both = @($plan | Where-Object { $_.A -eq 'both' } | ForEach-Object { $_.F })
+  foreach ($f in $both) { [Console]::Error.WriteLine("bridge: not sent: $f changed here AND on the server. Run  bridge files pull  first (it keeps both copies)") }
+  $same = @($plan | Where-Object { $_.A -eq 'same' } | ForEach-Object { $_.F }); if ($same.Count) { Save-Agreed $script:Mine $same }
+  $up = [string[]]@($plan | Where-Object { $_.A -eq 'up' } | ForEach-Object { $_.F })
+  if (-not $up.Count) {
+    if (-not $quiet) { if ($big -or $both.Count) { Write-Output 'nothing else to send' } else { Write-Output "up to date: the server already has $(if ($script:Scope) { $script:Scope } else { "everything in $root" })" } }
+    return
+  }
+  foreach ($f in $up) { Write-Output "  sending $f ($(Get-Size (Get-Item -LiteralPath (Join-Path $root $f) -Force).Length))" }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
     New-Pack $root $up "$t/up.tar"
     $r = Invoke-Remote $c "files-put $($c.BRIDGE_NAME)" -InFile "$t/up.tar"; if ($r.Code) { Fail 'push failed' }
+    Save-Agreed $script:Mine $up
     Write-Output (Get-Clean $r.Out.Trim())
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
 function Pull-Files($c, [string]$p) {
-  $scope = Get-Scope $c $p; $root = $c.BRIDGE_FILES
-  $srv = Get-ServerFiles $c; $mine = Get-Manifest $root
-  $want = [string[]]@($srv.Keys | Where-Object { (Test-InScope $_ $scope) -and -not ($mine.ContainsKey($_) -and $mine[$_] -eq $srv[$_]) })
+  $scope = Get-Scope $c 'pull' $p; $root = $c.BRIDGE_FILES
+  $plan = Get-Plan $c $scope
+  $same = @($plan | Where-Object { $_.A -eq 'same' } | ForEach-Object { $_.F }); if ($same.Count) { Save-Agreed $script:Srv $same }
+  $both = @($plan | Where-Object { $_.A -eq 'both' } | ForEach-Object { $_.F })
+  $want = [string[]]@($plan | Where-Object { $_.A -eq 'down' -or $_.A -eq 'both' } | ForEach-Object { $_.F })
   if (-not $want.Count) { Write-Output 'up to date: nothing new on the server'; return }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
     $r = Invoke-Remote $c 'files-get' -InBytes ($Utf8.GetBytes(($want -join "`n") + "`n")) -OutFile "$t/down.tar"; if ($r.Code) { Fail 'pull failed' }
     Expand-Safe "$t/down.tar" "$t/d"
-    $n = 0
+    $n = 0; $ok = New-Object Collections.Generic.List[string]
     foreach ($f in (Get-SyncFiles "$t/d")) {
       if (-not (Test-SafeDest $root $f)) { [Console]::Error.WriteLine("bridge: ${f}: a folder on its path is a link here; not written"); continue }
-      $dst = Join-Path $root $f; if (Test-Path -LiteralPath $dst) { Write-Output "replaced $f (your old copy is in $(Join-Path $Dir 'files-trash'))" }
-      Save-Old $root $f; New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
-      Copy-Item -LiteralPath (Join-Path "$t/d" $f) -Destination $dst -Force; $n++
+      $dst = Join-Path $root $f
+      if ($both -contains $f) {   # changed on both sides: the server copy takes the name, yours moves beside it
+        $leaf = Split-Path $f -Leaf; $ext = [IO.Path]::GetExtension($leaf); $stem = if ($ext -and $leaf.Length -gt $ext.Length) { $leaf.Substring(0, $leaf.Length - $ext.Length) } else { $leaf; $ext = '' }
+        $cn = "$stem.conflict-$($c.BRIDGE_NAME)-$((Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ'))$ext"
+        $cr = if ($f.Contains('/')) { $f.Substring(0, $f.LastIndexOf('/') + 1) + $cn } else { $cn }
+        Move-Item -LiteralPath $dst -Destination (Join-Path $root $cr) -Force; Write-Output "  kept both: $f (yours: $cr)"
+      } else { Save-Old $root $f }
+      New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+      Copy-Item -LiteralPath (Join-Path "$t/d" $f) -Destination $dst -Force; $n++; $ok.Add($f)
+      if ($both -notcontains $f) { Write-Output "  got $f ($(Get-Size (Get-Item -LiteralPath $dst -Force).Length))" }
     }
+    if ($ok.Count) { Save-Agreed $script:Srv $ok }
     Write-Output "got $(Get-Count $n) from the server, in $root"
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
@@ -317,6 +375,7 @@ switch ($cmd) {
   }
   'sync' {
     $c = Read-Config
+    if ($rest.Count -and $rest[0] -eq '--list') { Get-SyncFiles $c.BRIDGE_CONTEXT; break }
     if ($rest.Count -and $rest[0] -eq '--watch') {
       $n = if ($rest.Count -gt 1) { [int]$rest[1] } else { 60 }
       Write-Output "syncing every $n s (Ctrl+C stops)"; while ($true) { Sync-Context $c; Start-Sleep -Seconds $n }
@@ -340,7 +399,7 @@ switch ($cmd) {
   }
   'files' {
     $c = Read-Config; $sub = if ($rest.Count) { $rest[0] } else { '' }; $a1 = if ($rest.Count -gt 1) { $rest[1] } else { '' }
-    if ($sub -eq '') { [Console]::Error.WriteLine('(context folder: what bridge sync would send. For the file store: bridge files push | pull | share)'); Get-SyncFiles $c.BRIDGE_CONTEXT; break }
+    if ($sub -eq '' -or $sub -eq 'status') { New-Item -ItemType Directory -Force -Path $c.BRIDGE_FILES | Out-Null; Set-BigCaps; Show-Status $c $a1; break }
     if ($sub -eq 'setup') {
       $f = if ($a1) { $a1 } else { Join-Path $HOME 'PierceFiles' }
       New-Item -ItemType Directory -Force -Path $f | Out-Null; $f = (Resolve-Path -LiteralPath $f).ProviderPath
@@ -365,5 +424,5 @@ switch ($cmd) {
       }
     }
   }
-  default { Get-Content $PSCommandPath -TotalCount 13 | Select-Object -Skip 2 | ForEach-Object { $_.TrimStart('# ') }; exit 2 }
+  default { Get-Content $PSCommandPath -TotalCount 14 | Select-Object -Skip 2 | ForEach-Object { $_.TrimStart('# ') }; exit 2 }
 }

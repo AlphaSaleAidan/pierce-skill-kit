@@ -31,11 +31,25 @@ echo "{\"seven_day\":{\"used_percentage\":10,\"resets_at\":$((now + 3600))}}" > 
 echo "{\"five_hour\":{\"used_percentage\":99,\"resets_at\":$((now - 60))},\"seven_day\":{\"used_percentage\":50}}" > "$cache/usage-spare.json"
 out=$(draw "$(j "{\"five_hour\":{\"used_percentage\":40},\"seven_day\":{\"used_percentage\":91}}")")
 echo "$out" | grep -q "▶ main  5h ▰▰▱▱▱ 40%" || { echo "$out"; fail "current account line"; }
-echo "$out" | grep -q "  work  5h ∞   week ▰▱▱▱▱ 10%" || { echo "$out"; fail "infinity mark (no 5h window)"; }
+echo "$out" | grep -q "  work  5h –   week ▰▱▱▱▱ 10%" || { echo "$out"; fail "no 5h window, not in LK_USAGE_NO_5H: 5h –"; }
+echo "$out" | grep -q "old:" && { echo "$out"; fail "fresh numbers marked old"; }
 echo "$out" | grep -q "  spare  5h ▱▱▱▱▱ 0%" || { echo "$out"; fail "a window past its reset should read 0%"; }
-echo "LK_USAGE_NO_5H=\"main\"" > "$HOME/.config/pierce-skill-kit/config"
-draw "$(j '{"five_hour":{"used_percentage":40},"seven_day":{"used_percentage":91}}')" | grep -q "▶ main  5h ∞" || fail "LK_USAGE_NO_5H"
-echo "ok: several accounts: one line each, ▶ on this one, ∞ for no 5-hour limit, reset windows read 0%"
+# config is read as text, never run: a command line in it must not run
+printf 'touch %s/sourced\nexport LK_USAGE_NO_5H="main work"\n' "$T" > "$HOME/.config/pierce-skill-kit/config"
+out=$(draw "$(j '{"five_hour":{"used_percentage":40},"seven_day":{"used_percentage":91}}')")
+echo "$out" | grep -q "▶ main  5h ∞" || { echo "$out"; fail "LK_USAGE_NO_5H"; }
+echo "$out" | grep -q "  work  5h ∞   week" || { echo "$out"; fail "LK_USAGE_NO_5H second name"; }
+[ ! -e "$T/sourced" ] || fail "status line ran the config file as shell"
+echo "ok: several accounts: one line each, ▶ on this one, ∞ only from LK_USAGE_NO_5H, reset windows read 0%, config never run"
+# numbers saved over 6h ago: dimmed and marked old
+touch -d '3 days ago' "$cache/usage-work.json"; touch -d '7 hours ago' "$cache/usage-spare.json"
+raw=$(rm -rf "$HOME/.cache/statusline"; j '{"five_hour":{"used_percentage":40},"seven_day":{"used_percentage":91}}' | sh "$SL")
+out=$(printf '%s' "$raw" | sed 's/\x1b\[[0-9;]*m//g')
+echo "$out" | grep -q "  work  .*week ▰▱▱▱▱ 10%.*(old: 3d ago)" || { echo "$out"; fail "3-day-old numbers not marked"; }
+echo "$out" | grep -q "  spare  .*(old: 7h ago)" || { echo "$out"; fail "7-hour-old numbers not marked"; }
+echo "$out" | grep "▶ main" | grep -q "old:" && fail "fresh line marked old"
+printf '%s' "$raw" | grep "  work  " | grep -q "$(printf '\033')\[2m▰" || fail "old numbers not dimmed"
+echo "ok: numbers over 6h old are dimmed and say how old"
 echo '{"site":{"name":"site","limit_pct":20,"baseline_pct":80,"carried":0},"docs":{"name":"docs","limit_pct":5,"baseline_pct":85,"carried":0}}' > "$HOME/.claude/usage-budgets.json"
 draw "$(j '{"seven_day":{"used_percentage":91}}')" | grep -q "budget site 11/20% · docs 6/5%" || fail "budgets line"
 echo "ok: claude-usage budgets show used/limit"

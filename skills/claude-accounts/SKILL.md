@@ -41,5 +41,7 @@ An account is chosen when a session starts; nothing moves a running session or j
 - If two accounts show the same login email, the second `/login` never happened: open that account and sign in.
 - Never print login secrets; compare logins by email only.
 
-Needs: this kit (`claude-acct`, `claude-tab`), the statusline mod for usage numbers, the route mod for
-`claude-pick` (`sh mods/route/install.sh`), `jq`. Windows: run these on the server over SSH (`ssh box claude-pick`).
+Needs: this kit (`claude-acct`, `claude-tab`), the usage status line for usage numbers (`sh mods/usage/install.sh`),
+the route mod for `claude-pick` (`sh mods/route/install.sh`), `jq`. Windows: run these on the server over SSH with a
+terminal and the full path: `ssh -t me@my-server '~/.local/bin/claude-pick'`.
+If `claude-pick` says "No usage numbers yet", there is no least-used account to pick: choose by purpose.

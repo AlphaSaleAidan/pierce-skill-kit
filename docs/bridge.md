@@ -4,11 +4,14 @@ The bridge lets a Claude Code session on your laptop (Windows, Mac or Linux) mes
 server, read its answers, and share a folder of context with it: briefs, the decisions log, the reports log, a
 memory index, `ROPE.md`. Everything goes over SSH with a key. No open ports, no relay service in the middle.
 
+**Moving big files (PDFs, videos, exports)?** Jump to the [file store](#file-store-big-files-both-ways).
+
 ```
 laptop                                            server (the kit, lead in tmux "hub:Lead")
   bridge send "..."   ── ssh ──>  bridge-serve  ──> typed into the lead: [BRIDGE from my-laptop] ...
   bridge inbox        <── ssh ──  outbox        <── the lead runs: bridge reply "..."
   ~/pierce-bridge/context  <── ssh (tar) ──>  ~/.pierce-skill-kit/shared
+  ~/PierceFiles            <── ssh (push/pull) ──>  ~/.pierce-skill-kit/files
 ```
 
 Files: [`mods/bridge/`](../mods/bridge/): `bridge` (Mac/Linux CLI, and on the server `bridge-serve`), `bridge.ps1`
@@ -54,8 +57,8 @@ On the laptop:
 | `bridge sync --watch [N]` | syncs every N seconds (default 60) until Ctrl+C. It polls; there is no file watcher |
 | `bridge share <path> < file` | writes one file into the context folder, then syncs |
 | `bridge pull [path]` | syncs, then lists the folder (or prints one file) |
-| `bridge files` | lists what sync would send, after the deny-list and size caps |
-| `bridge files setup\|push\|pull\|share` | the file store for big files (below) |
+| `bridge sync --list` | lists what sync would send, after the deny-list and size caps |
+| `bridge files` / `setup` / `push` / `pull` / `share` | the [file store](#file-store-big-files-both-ways) for big files |
 
 On the server (the lead runs these): `bridge reply "<text>"` (queues an answer for every laptop's inbox) and
 `bridge log [N]` (the last N bridge actions).
@@ -87,30 +90,68 @@ becomes `name.conflict-<laptop-name>-<UTC time>`, and the conflict is printed an
 OS, so the deny-list is enforced in one place per side; rsync isn't used.
 
 ## File store (big files, both ways)
-The context folder is for small notes (1 MB a file). For real files (PDFs, videos, exports up to **100 MB each**)
-use the file store: a folder on your computer (default `~/PierceFiles`) and one on the server
-(`~/.pierce-skill-kit/files`), over the same SSH link. Nothing else to install or pay for.
+A folder on your computer (`~/PierceFiles`; on Windows `C:\Users\<you>\PierceFiles`) and one on the server
+(`~/.pierce-skill-kit/files`), linked over the same SSH connection. Files up to **100 MB** each. Nothing else to
+install or pay for. On the server, tell Claude: "put the result in ~/.pierce-skill-kit/files".
 
-```sh
-bridge files setup                 # once (Windows: bridge files setup, after the bridge.ps1 shortcut)
-bridge files push                  # send what's new or changed in ~/PierceFiles to the server
-bridge files push ~/Desktop/q3.pdf # a file from anywhere: copied into ~/PierceFiles, then sent
-bridge files pull                  # get what Claude made on the server
-bridge files share q3.pdf 30       # a link anyone can open for 30 minutes (off unless the server owner turns it on)
+Set it up once:
+```
+bridge files setup
+```
+Send what's new or changed in your folder:
+```
+bridge files push
+```
+Send one file from anywhere (it's copied into the folder first):
+```
+bridge files push ~/Desktop/q3.pdf
+```
+On Windows:
+```
+bridge files push $HOME\Desktop\q3.pdf
+```
+Get what Claude made on the server:
+```
+bridge files pull
+```
+See what's the same, what's waiting, and what changed on both sides (nothing is moved):
+```
+bridge files
 ```
 
-- Only new or changed files travel (checked by hash), up to 1 GB per push or pull.
-- Nothing is ever lost: when a push or pull replaces a file, the old copy goes to `~/pierce-bridge/files-trash/`
-  (laptop) or `~/.pierce-skill-kit/bridge/files-trash/` (server). Empty those yourself now and then.
-- Same deny-list as sync: `.env`, keys, `.ssh`, anything named secret/token/credential never moves.
-- Server off or laptop asleep? Push and pull just say "can't reach the server" and change nothing. Run them again
-  later. There is no background sync: you push and pull when you want.
-- On the server, tell Claude: "put the result in ~/.pierce-skill-kit/files".
-- **Sharing is off by default.** The server owner turns it on with `LK_FILES_SHARE=1` in
-  `~/.config/pierce-skill-kit/config`, and needs `cloudflared` and `python3` on the server. Each link has a random
-  part, serves that one file only, and stops after the minutes you give (default 60, max 1440).
-- Your server needs the new bridge once: `bridge setup me@my-server` again (keeps your settings). An old server
-  answers with "the server has an older bridge" and the exact command.
+What it looks like:
+```
+> bridge files push
+  sending clients/q3.md (1 KB)
+  sending demo-video.mp4 (7.6 MB)
+sent 2 files to the server
+> bridge files pull
+  got clients/summary.md (26 bytes)
+got 1 file from the server, in C:\Users\jake\PierceFiles
+```
+
+Good to know:
+- **Only new or changed files travel.** Up to 1 GB per push or pull. Allow about a minute per 100 MB on a
+  typical home upload. Each file is listed as it goes; there is no percentage bar.
+- **Deleting a file doesn't delete it on the other side.** Delete it in both places, or ask Claude to.
+- **Changed on both sides?** `push` won't overwrite the server's copy; it tells you to pull. `pull` keeps both: the
+  server's copy takes the name and yours moves beside it as `q3.conflict-<your computer>-<time>.md`.
+- **Nothing is lost.** When a file is replaced, the old copy goes to `~/pierce-bridge/files-trash/` (your computer)
+  or `~/.pierce-skill-kit/bridge/files-trash/` (server). Empty those yourself now and then.
+- **Secrets stay home.** Same deny-list as sync: `.env`, keys, `.ssh`, anything named secret, token or credential.
+  Push tells you once which files it kept back.
+- **Server off or computer asleep?** Push and pull say "can't reach the server" and change nothing. Run them
+  again later. There's no background sync: you push and pull when you want.
+- **The first time:** your server needs the new bridge. Run `bridge setup me@my-server` again (keeps your
+  settings). An old server answers "the server has an older bridge" with the exact command.
+
+### Share a file by link (off by default)
+```
+bridge files share q3.pdf 30
+```
+pushes `q3.pdf` if needed, then prints a link anyone can open for 30 minutes (default 60, max 1440). Each link has
+a random part and serves that one file only. The server owner turns this on with `LK_FILES_SHARE=1` in
+`~/.config/pierce-skill-kit/config`, and needs `cloudflared` and `python3` on the server.
 
 ## What never syncs
 Matched against every part of the path, case-insensitive, on **both** sides (the laptop never sends them, the

@@ -1,10 +1,12 @@
 #!/bin/sh
-# Plan usage in one command: the usage status line (5h + weekly bars for every account you use, ∞ for no 5-hour
-# limit, budgets if you keep them, a server-busy line). It reads only the numbers each account's status line saved:
-# no login tokens, no private usage API.
+# The usage status line in one command. This is the statusline mod (`mods/install.sh statusline`, same files, same
+# settings entry) plus the server-busy helper it needs when agent-board isn't installed; there is one status line,
+# not two. It shows 5h + weekly bars per account you use, budgets if you keep them and a server-busy line, from the
+# numbers each account's status line saved: no login tokens, no private usage API.
 #   sh mods/usage/install.sh               install
 #   sh mods/usage/install.sh --uninstall   remove the status line
-# Config (kit config file): LK_USAGE_NO_5H (account names with no 5-hour limit, e.g. "main work"). Needs jq.
+# Config (kit config file, read as text): LK_USAGE_NO_5H="main work" = accounts with no 5-hour limit (shown as ∞).
+# Needs jq.
 set -e
 cd "$(dirname "$0")"
 DEST=$HOME/.config/pierce-skill-kit/mods/statusline

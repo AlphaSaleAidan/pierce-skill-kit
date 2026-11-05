@@ -9,13 +9,25 @@ your settings), then `bridge files setup`.
 
 ### Added
 - **File store** in the bridge mod: `bridge files push` / `pull` for files up to 100 MB each, both ways over the same
-  SSH link (Mac, Linux, Windows). Only changed files travel; a replaced copy goes to a `files-trash` folder, never
-  lost; same deny-list as sync. `bridge files push ~/Desktop/q3.pdf` copies a file in and sends it.
+  SSH link (Mac, Linux, Windows). Only changed files travel, each listed as it goes; a replaced copy goes to a
+  `files-trash` folder, never lost; same deny-list as sync. A file changed on both sides is never overwritten: push
+  says to pull first, pull keeps both. `bridge files` shows what's the same, to push or to pull.
+  `bridge files push ~/Desktop/q3.pdf` copies a file in and sends it.
   `bridge files share q3.pdf 30` makes a 30-minute link, off until the server owner sets `LK_FILES_SHARE=1`.
-- **route** mod: `claude-pick` starts Claude on your least-used account (menu, `auto`, `order`), using status-line
-  usage only. Try: `claude-pick auto -p "hello"`.
-- **usage** mod: `sh mods/usage/install.sh` sets up the usage status line: `▶ main  5h ▰▰▱▱▱ 40%   week ▰▰▰▰▰ 91%`
-  and `  work  5h ∞   week ▰▱▱▱▱ 10%`, one line per account, plus a server-busy line.
+- **route** mod: `claude-pick` starts Claude on your least-used account (menu with each number's age, `auto`,
+  `order`), using status-line usage only. With no numbers yet it says so instead of naming a winner. Try:
+  `claude-pick auto -p "hello"`. Windows: `ssh -t me@my-server '~/.local/bin/claude-pick'`.
+- **usage** installer: `sh mods/usage/install.sh` is the statusline mod plus the server-busy helper, one line per
+  account: `▶ main  5h ▰▰▱▱▱ 40%   week ▰▰▰▰▰ 91%` and `  work  5h ∞   week ▰▱▱▱▱ 10%`. Numbers over 6h old are
+  dimmed and say `(old: 3d ago)`. ∞ only for accounts in `LK_USAGE_NO_5H`; the kit config is read as text, not run.
+
+### Changed (may break a script)
+- Plain `bridge files` now shows the file store. The old listing of what `bridge sync` would send is
+  `bridge sync --list`.
+
+### Changed
+- `claude-acct` (and `claude-pick`) count a `~/.claude-<name>` folder as an account only if it holds a Claude login
+  or was made by `claude-acct add`; other tools' folders such as `~/.claude-flow` are no longer listed or shared into.
 
 ### Fixed
 - `bridge.ps1 share <path>` / `pull <path>` read only the first letter of a lone argument.

@@ -63,8 +63,12 @@ echo "ok: later skills are visible, new top-level items link on the next run, pr
 timeout 2 claude-acct add alpha >/dev/null 2>&1 || true; timeout 2 claude-acct add beta >/dev/null 2>&1 || true
 mkdir -p ~/.cache/pierce-skill-kit
 echo '{"five_hour":{"used_percentage":10},"seven_day":{"used_percentage":20}}' > ~/.cache/pierce-skill-kit/usage-alpha.json
+mkdir -p ~/.claude-flow   # another tool's state folder (e.g. Ruflo): not an account, never listed or shared into
+timeout 2 claude-acct run work >/dev/null 2>&1 || true
+[ -z "$(ls -A ~/.claude-flow)" ] || fail "run shared setup into ~/.claude-flow"
 claude-acct list > /tmp/list.log
 for n in main work alpha beta; do grep -qE "^ +$n " /tmp/list.log || fail "list is missing $n"; done
+grep -q flow /tmp/list.log && fail "list shows ~/.claude-flow as an account"
 [ "$(wc -l < /tmp/list.log)" = 4 ] || fail "list should show exactly 4 accounts"
 grep -qE 'alpha +5h 10% · week 20%' /tmp/list.log || fail "alpha usage missing"
 grep -E '^ +beta ' /tmp/list.log | grep -q 'no data yet' || fail "alpha usage leaked into beta"
