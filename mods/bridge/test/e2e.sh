@@ -174,7 +174,7 @@ t "a 2 MB file is skipped with a note" sh -c 'echo "$1" | grep -q "big.bin.*over
 t "the 2 MB file did not reach the vps" V "test ! -e $SH/big.bin"
 L "mkdir -p $LC/bulk && for i in \$(seq 1 55); do head -c 1000000 /dev/zero > $LC/bulk/f\$i; done"
 sout=$(L 'bridge sync' 2>&1); rc=$?
-[ $rc != 0 ] && echo "$sout" | grep -q "50 MB total cap" && ok "a 55 MB folder is refused (total cap)" || no "total cap (rc=$rc: $sout)"
+[ $rc != 0 ] && echo "$sout" | grep -q "over the 50 MB cap" && ok "a 55 MB folder is refused (total cap)" || no "total cap (rc=$rc: $sout)"
 t "nothing from the refused sync reached the vps" V "test ! -e $SH/bulk"
 L "rm -rf $LC/bulk $LC/big.bin"
 
@@ -287,6 +287,18 @@ L "echo cv > '$LF/Résumé 2026.md'" && L 'bridge files push' >/dev/null 2>&1
 t "push: a non-English file name arrives" V "grep -qx cv '$FS/Résumé 2026.md'"
 V "echo bericht > '$FS/Übersicht 日本.md'" && L 'bridge files pull' >/dev/null 2>&1
 t "pull: a non-English file name arrives" L "grep -qx bericht '$LF/Übersicht 日本.md'"
+L "echo dash > '$LF/-notes.txt'"; o=$(L 'bridge files push' 2>&1)
+t "a file named -notes.txt doesn't break push" V "grep -qx dash '$FS/-notes.txt'"
+V "echo srvdash > '$FS/-from-server.md'"; o=$(L 'bridge files pull' 2>&1)
+t "a file named -from-server.md doesn't break pull" L "grep -qx srvdash '$LF/-from-server.md'"
+o=$(L 'bridge files push nope' 2>&1); rc=$?
+t "a mistyped path is an error, not 'up to date'" sh -c '[ "$1" != 0 ] && echo "$2" | grep -q "no file or folder called nope"' _ "$rc" "$o"
+L "mkdir -p $LF/batch && for i in 1 2 3; do echo b\$i > $LF/batch/f\$i; done"
+o=$(L 'FILES_BATCH=1 bridge files push batch' 2>&1)
+t "files go in batches (one per batch here) and all arrive" sh -c 'echo "$1" | grep -q "sent 3 files"' _ "$o"
+t "  ... all three on the server" V "test -f $FS/batch/f1 && test -f $FS/batch/f2 && test -f $FS/batch/f3"
+V "for i in 1 2 3; do echo s\$i > $FS/batch/f\$i; done"; o=$(L 'FILES_BATCH=1 bridge files pull batch' 2>&1)
+t "pull in batches: all three arrive" L "grep -qx s3 $LF/batch/f3 && grep -qx s1 $LF/batch/f1"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"
@@ -426,9 +438,13 @@ W 'mkdir -p /root/WinFiles/sub && echo win-file > /root/WinFiles/sub/w.md && ech
 o=$(W "$P files push" 2>&1)
 t "ps1 push: windows -> server" V "grep -qx win-file $FS/sub/w.md"
 t "ps1 push never sends .env" V "test ! -e $FS/.env"
+t "ps1 push says .env stays home" sh -c 'echo "$1" | grep -q "kept on this computer.*: \.env"' _ "$o"
+W "echo wd > '/root/WinFiles/-win.md'" && W "$P files push" >/dev/null 2>&1
+t "ps1: a file named -win.md doesn't break push" V "grep -qx wd '$FS/-win.md'"
+o=$(W "$P files push nope" 2>&1); rc=$?
+t "ps1: a mistyped path is an error" sh -c '[ "$1" != 0 ] && echo "$2" | grep -q "no file or folder called nope"' _ "$rc" "$o"
 W "echo winv > '/root/WinFiles/Résumé win.md'" && W "$P files push" >/dev/null 2>&1
 t "ps1 push: a non-English file name arrives" V "grep -qx winv '$FS/Résumé win.md'"
-t "ps1 push says .env stays home" sh -c 'echo "$1" | grep -q "kept on this computer.*: \.env"' _ "$o"
 o=$(W "$P files pull" 2>&1)
 t "ps1 pull: server -> windows" W 'grep -qx claude-v2 /root/WinFiles/out/r.md && grep -qx laptop-v3 /root/WinFiles/docs/a.md'
 t "ps1 pull: the 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(W "sha256sum /root/WinFiles/big.bin" | cut -c1-64)" ]'

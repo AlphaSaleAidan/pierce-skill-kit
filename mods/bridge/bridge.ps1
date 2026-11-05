@@ -15,7 +15,8 @@
 $ErrorActionPreference = 'Stop'
 try { [Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
 $MaxFile = 1048576; $MaxTotal = 52428800; $MaxEntries = 5000
-$FilesMaxFile = 104857600; $FilesMaxTotal = 1073741824   # file store: 100 MB per file, 1 GB per push or pull
+$FilesMaxFile = 104857600; $FilesMaxTotal = 1073741824   # file store: 100 MB per file, 1 GB per ssh call
+$FilesBatch = if ($env:FILES_BATCH) { [long]$env:FILES_BATCH } else { 104857600 }   # batches of up to 100 MB: a dropped link loses one batch
 $Dir = if ($env:BRIDGE_DIR) { $env:BRIDGE_DIR } else { Join-Path $HOME 'pierce-bridge' }
 $Utf8 = New-Object Text.UTF8Encoding $false
 # Same deny-list as the sh side; matched against every part of the path, lower-cased.
@@ -49,8 +50,9 @@ function Get-SyncFiles([string]$root) {   # relative paths ('/' separated) that 
 
 function New-Pack([string]$root, $files, [string]$tarPath) {
   $total = 0; foreach ($f in $files) { $total += (Get-Item -LiteralPath (Join-Path $root $f) -Force).Length }
-  if ($total -gt $MaxTotal) { Fail "refusing to sync: $total bytes is over the $($MaxTotal / 1MB) MB total cap" }
-  $list = "$tarPath.list"; [IO.File]::WriteAllLines($list, [string[]]@($files), $Utf8)
+  if ($total -gt $MaxTotal) { Fail "refusing: $([Math]::Floor($total / 1MB)) MB is over the $($MaxTotal / 1MB) MB cap for one transfer" }
+  # ./ first: a name starting with - is never read as a tar option
+  $list = "$tarPath.list"; [IO.File]::WriteAllLines($list, [string[]]@($files | ForEach-Object { "./$_" }), $Utf8)
   & tar -cf $tarPath -C $root -T $list; if ($LASTEXITCODE) { Fail 'tar failed' }
 }
 
@@ -171,9 +173,15 @@ function Stop-Remote($c, $r) {   # an ssh call failed: say why in plain words
 }
 function Get-ServerFiles($c) {
   $r = Invoke-Remote $c 'files-ls' -InBytes ([byte[]]@()); if ($r.Code) { Stop-Remote $c $r }
-  $h = New-Object 'Collections.Generic.Dictionary[string,string]'
-  foreach ($l in ($r.Out -split "`n")) { $i = $l.IndexOf("`t"); if ($i -gt 0) { $h[$l.Substring(0, $i)] = $l.Substring($i + 1).Trim() } }
+  $h = New-Object 'Collections.Generic.Dictionary[string,string]'; $script:SrvSize = New-Object 'Collections.Generic.Dictionary[string,long]'
+  foreach ($l in ($r.Out -split "`n")) { $p = $l.TrimEnd("`r").Split("`t"); if ($p.Count -ge 2 -and $p[0]) { $h[$p[0]] = $p[1]; if ($p.Count -ge 3) { $script:SrvSize[$p[0]] = [long]$p[2] } } }
   return $h
+}
+function Split-Batches([string[]]$files, $sizeOf) {  # lists of up to $FilesBatch bytes each
+  $out = New-Object Collections.Generic.List[object]; $cur = New-Object Collections.Generic.List[string]; $tot = [long]0
+  foreach ($f in $files) { $s = [long](& $sizeOf $f); if ($cur.Count -and $tot + $s -gt $FilesBatch) { $out.Add([string[]]$cur.ToArray()); $cur.Clear(); $tot = 0 }; $cur.Add($f); $tot += $s }
+  if ($cur.Count) { $out.Add([string[]]$cur.ToArray()) }
+  return ,$out
 }
 function Test-InScope([string]$f, [string]$scope) { return (-not $scope -or $f -eq $scope -or $f.StartsWith("$scope/")) }
 $PathCmp = if ($env:OS -eq 'Windows_NT') { [StringComparison]::OrdinalIgnoreCase } else { [StringComparison]::Ordinal }
@@ -195,6 +203,7 @@ function Get-Scope($c, [string]$mode, [string]$p) {  # a path inside the store -
       [Console]::Out.WriteLine("copied $b into $root"); return $b
     }
   }
+  if ([IO.Path]::IsPathRooted($p)) { Fail "no such file: $p" }
   $s = $p.Replace('\', '/').TrimEnd('/')
   if ($s.StartsWith('/') -or $s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }
   return $s
@@ -233,14 +242,15 @@ function Get-StoreNotes($c, [string]$scope) {  # say once per file what stays ho
   }
   return $big
 }
+function Test-Nope($c, [string]$scope, $plan) { if ($scope -and -not $plan.Count) { Fail "no file or folder called $scope in $($c.BRIDGE_FILES) or on the server" } }
 function Show-Status($c, [string]$p) {
-  $scope = Get-Scope $c 'pull' $p; $plan = Get-Plan $c $scope
+  $scope = Get-Scope $c 'pull' $p; $plan = Get-Plan $c $scope; Test-Nope $c $scope $plan
   if (-not $plan.Count) { Write-Output "the file store is empty: put files in $($c.BRIDGE_FILES), then bridge files push"; return }
   foreach ($x in $plan) { $w = switch ($x.A) { 'same' { 'same     ' } 'up' { 'to push  ' } 'down' { 'to pull  ' } default { 'CHANGED BOTH SIDES (pull keeps both)  ' } }; Write-Output "  $w $($x.F)" }
 }
 function Push-Files($c, [string]$p, [bool]$quiet = $false) {
   $script:Scope = Get-Scope $c 'push' $p; $root = $c.BRIDGE_FILES
-  $plan = Get-Plan $c $script:Scope; $big = Get-StoreNotes $c $script:Scope
+  $plan = Get-Plan $c $script:Scope; Test-Nope $c $script:Scope $plan; $big = Get-StoreNotes $c $script:Scope
   $both = @($plan | Where-Object { $_.A -eq 'both' } | ForEach-Object { $_.F })
   foreach ($f in $both) { [Console]::Error.WriteLine("bridge: not sent: $f changed here AND on the server. Run  bridge files pull  first (it keeps both copies)") }
   $same = @($plan | Where-Object { $_.A -eq 'same' } | ForEach-Object { $_.F }); if ($same.Count) { Save-Agreed $script:Mine $same }
@@ -249,27 +259,41 @@ function Push-Files($c, [string]$p, [bool]$quiet = $false) {
     if (-not $quiet) { if ($big -or $both.Count) { Write-Output 'nothing else to send' } else { Write-Output "up to date: the server already has $(if ($script:Scope) { $script:Scope } else { "everything in $root" })" } }
     return
   }
-  foreach ($f in $up) { Write-Output "  sending $f ($(Get-Size (Get-Item -LiteralPath (Join-Path $root $f) -Force).Length))" }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
-    New-Pack $root $up "$t/up.tar"
-    $r = Invoke-Remote $c "files-put $($c.BRIDGE_NAME)" -InFile "$t/up.tar"; if ($r.Code) { Fail 'push failed' }
-    Save-Agreed $script:Mine $up
-    Write-Output (Get-Clean $r.Out.Trim())
+    $done = 0
+    foreach ($batch in (Split-Batches $up { param($f) (Get-Item -LiteralPath (Join-Path $root $f) -Force).Length })) {
+      foreach ($f in $batch) { Write-Output "  sending $f ($(Get-Size (Get-Item -LiteralPath (Join-Path $root $f) -Force).Length))" }
+      New-Pack $root $batch "$t/up.tar"
+      $r = Invoke-Remote $c "files-put $($c.BRIDGE_NAME)" -InFile "$t/up.tar"
+      if ($r.Code) { Fail "push stopped after $(Get-Count $done) of $($up.Count). Run it again to send the rest (finished files aren't sent twice)" }
+      Save-Agreed $script:Mine $batch; $done += $batch.Count
+    }
+    Write-Output "sent $(Get-Count $done) to the server"
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
 function Pull-Files($c, [string]$p) {
   $scope = Get-Scope $c 'pull' $p; $root = $c.BRIDGE_FILES
-  $plan = Get-Plan $c $scope
+  $plan = Get-Plan $c $scope; Test-Nope $c $scope $plan
   $same = @($plan | Where-Object { $_.A -eq 'same' } | ForEach-Object { $_.F }); if ($same.Count) { Save-Agreed $script:Srv $same }
   $both = @($plan | Where-Object { $_.A -eq 'both' } | ForEach-Object { $_.F })
   $want = [string[]]@($plan | Where-Object { $_.A -eq 'down' -or $_.A -eq 'both' } | ForEach-Object { $_.F })
+  if ($env:OS -eq 'Windows_NT') {   # Windows can't hold Report.md and report.md in one folder: keep the first, say so
+    $seen = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($k in $script:Mine.Keys) { [void]$seen.Add($k) }
+    $want = [string[]]@($want | Where-Object {
+      if ($seen.Add($_) -or $script:Mine.ContainsKey($_)) { $true } else { [Console]::Error.WriteLine("bridge: skipped ${_}: Windows can't keep two names that differ only in capitals. Rename one on the server"); $false } })
+  }
   if (-not $want.Count) { Write-Output 'up to date: nothing new on the server'; return }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
-    $r = Invoke-Remote $c 'files-get' -InBytes ($Utf8.GetBytes(($want -join "`n") + "`n")) -OutFile "$t/down.tar"; if ($r.Code) { Fail 'pull failed' }
+    $n = 0
+    foreach ($batch in (Split-Batches $want { param($f) if ($script:SrvSize.ContainsKey($f)) { $script:SrvSize[$f] } else { 0 } })) {
+    $ok = New-Object Collections.Generic.List[string]
+    Remove-Item -LiteralPath "$t/d" -Recurse -Force -ErrorAction SilentlyContinue
+    $r = Invoke-Remote $c 'files-get' -InBytes ($Utf8.GetBytes(($batch -join "`n") + "`n")) -OutFile "$t/down.tar"
+    if ($r.Code) { Fail "pull stopped after $(Get-Count $n) of $($want.Count). Run it again to get the rest (finished files aren't fetched twice)" }
     Expand-Safe "$t/down.tar" "$t/d"
-    $n = 0; $ok = New-Object Collections.Generic.List[string]
     foreach ($f in (Get-SyncFiles "$t/d")) {
       if (-not (Test-SafeDest $root $f)) { [Console]::Error.WriteLine("bridge: ${f}: a folder on its path is a link here; not written"); continue }
       $dst = Join-Path $root $f
@@ -284,6 +308,7 @@ function Pull-Files($c, [string]$p) {
       if ($both -notcontains $f) { Write-Output "  got $f ($(Get-Size (Get-Item -LiteralPath $dst -Force).Length))" }
     }
     if ($ok.Count) { Save-Agreed $script:Srv $ok }
+    }
     Write-Output "got $(Get-Count $n) from the server, in $root"
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }

@@ -83,7 +83,7 @@ second=$(claude-acct list | sed -n 2p | awk '{print $1}')
 [ "$(printf '2\n' | timeout 2 claude-acct 2>/dev/null | grep -o "CFG=.*")" = "CFG=$HOME/.claude-$second" ] || fail "picker 2 did not start account $second"
 [ "$(printf '\n' | timeout 2 claude-acct 2>/dev/null | grep -o "CFG=.*")" = "CFG=unset" ] || fail "picker Enter did not start main"
 rc=0; printf '99\n' | claude-acct >/tmp/pick99.log 2>&1 || rc=$?
-[ "$rc" = 2 ] && grep -q 'no such number' /tmp/pick99.log && ! grep -q CFG= /tmp/pick99.log || fail "picker accepted a bad number"
+[ "$rc" = 2 ] && grep -q 'pick 1-' /tmp/pick99.log && ! grep -q CFG= /tmp/pick99.log || fail "picker accepted a bad number"
 echo "ok: piping 2 into claude-acct starts the 2nd account; Enter = main; a bad number is refused"
 
 # --- claude-tab -a with an unknown account

@@ -1,9 +1,9 @@
 # Separate Claude accounts for separate purposes
 
 If you have more than one Claude account (say a personal one and a work or client one, each with its own login and
-billing), `claude-acct` keeps them apart while sharing your setup. **Each account must be its own legitimately owned
-and paid account; check Anthropic's terms for your plan.** This is for keeping work separate, not for getting around
-usage limits: an account is picked when a session starts, and nothing moves a running session to another account.
+billing), `claude-acct` keeps them apart while sharing your setup. **Use only accounts you're entitled to use, each
+its own login and plan, and follow your plan's terms.** `claude-pick` just starts you on the one with the most room
+left; it reads no login, calls no API, and never moves a running session to another account.
 
 ```sh
 claude-acct add work           # creates ~/.claude-work, shares your setup into it, opens Claude: type /login
@@ -21,17 +21,20 @@ claude-tab ~/code/client-a -n client-a -a work   # a project tab that runs on th
 - **Usage numbers** are the 5-hour and weekly windows Claude Code itself reports to the status line (`rate_limits`).
   The usage status line (`sh mods/usage/install.sh`) saves them per account each time it draws, so an account shows
   "no data yet" until you've used it with that installed. No login token is read and no private API is called.
-- **Start on the least-used account** (route mod, `sh mods/route/install.sh`): `claude-pick` shows a menu sorted by
-  weekly %, then 5-hour % (Enter = least used); `claude-pick auto -p "..."` skips the menu; `claude-pick order` prints
-  the config folders least-used first for scripts. It uses the same saved status-line numbers; an account with no
-  numbers yet sorts last. With no numbers for any account it says so, marks no winner, and `auto` starts the first
-  account (main). Windows: these run on your server, so from PowerShell run
+- **Start on the account with the most room** (route mod, `sh mods/route/install.sh`): `claude-pick` shows a menu
+  sorted by weekly %, then 5-hour % (Enter = the top one); `claude-pick auto -p "..."` skips the menu;
+  `claude-pick order` prints the config folders in that order for scripts. An account at 95% or more of its 5-hour
+  or weekly window is **full**: it goes last, `auto` never picks it and says why
+  (`work: 5h at 100%, resets in 2h, skipped`). If every account is full, `auto` says which resets first and exits 1
+  without starting Claude. An account with no numbers yet sorts after those with numbers; with no numbers at all it
+  says so and `auto` starts main. With the route mod installed, plain `claude-acct` opens the same menu.
+  Works on Linux and macOS. Windows: these run on your server, so from PowerShell run
   `ssh -t me@my-server '~/.local/bin/claude-pick'` (`-t` gives the menu a terminal; the full path is needed because a
   one-command ssh login often skips `~/.local/bin` on PATH). See [windows.md](windows.md).
 - **Remove an account:** sign out in it (`/logout`), then delete `~/.claude-<name>`.
 
 ## What it looks like
-The status line with two accounts (`▶` = the account this tab runs on; colours: green, yellow over 60%, red over 85%):
+The status line with three accounts (`▶` = the account this tab runs on; colours: green, yellow over 60%, red over 85%):
 
 ```text
 ▶ main  5h ▰▰▱▱▱ 40% ↻2h   week ▰▰▰▰▰ 91% ↻1d1h
@@ -45,17 +48,21 @@ The status line with two accounts (`▶` = the account this tab runs on; colours
 `claude-pick`:
 
 ```text
-  1) work       week 10%  5h 0%   (2h ago)   <- least used
-  2) spare      week 52%  5h 0%   (3d ago)
-  3) main       week 91%  5h 40%  (just now)
-Account number (Enter = least used):
+  1) work     week 10%  5h 0%
+  2) main     week 60%  5h 40%
+  3) alpha    week 20%  5h 100%
+     full: 5h at 100%, resets in 2h
+Account number (Enter = most room):
 ```
+
+(Trimmed to fit a phone: in a terminal each row also shows how old its numbers are, e.g. `(2h ago)`, and row 1
+ends with `<- most room`.)
 
 Before any account has numbers:
 
 ```text
 No usage numbers yet: install the usage status line (sh mods/usage/install.sh) and open each account once.
-  1) main       week ?    5h ?
-  2) work       week ?    5h ?
+  1) main     week ?    5h ?
+  2) work     week ?    5h ?
 Account number (Enter = 1):
 ```

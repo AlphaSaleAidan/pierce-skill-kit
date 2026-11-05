@@ -1,7 +1,8 @@
 #!/bin/sh
 # claude-acct - run separate Claude Code accounts for separate purposes (e.g. personal + work), each with its own
 # login and billing, sharing your skills, CLAUDE.md, agents, commands and settings.
-#   claude-acct                 pick an account (shows each one's last 5h / weekly usage) and start Claude on it
+#   claude-acct                 pick an account (shows each one's last 5h / weekly usage) and start Claude on it;
+#                               with the route mod installed this is claude-pick's menu, so there is one picker
 #   claude-acct list            accounts + last seen usage
 #   claude-acct names           account names, one per line (for scripts)
 #   claude-acct add <name>      create ~/.claude-<name>, share your setup into it, then sign in (/login) there
@@ -21,11 +22,12 @@ dir_of() { [ "$1" = main ] && echo "$MAIN" || echo "$HOME/.claude-$1"; }
 names() { echo main; for d in "$HOME"/.claude-*/; do
   [ -e "$d.credentials.json" ] || [ -e "$d.claude.json" ] || [ -e "$d.kit-account" ] || continue
   d=${d%/}; echo "${d##*/.claude-}"; done; }
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }   # GNU, then BSD/macOS
 ago() { s=$1; if [ "$s" -lt 3600 ]; then echo "$((s / 60))m ago"; elif [ "$s" -lt 86400 ]; then echo "$((s / 3600))h ago"; else echo "$((s / 86400))d ago"; fi; }
 usage() { # usage <name>: "5h 23% · week 71% (2h ago)" from the statusline's saved rate_limits, or "no data yet"
   f=$CACHE/usage-$1.json
   [ -s "$f" ] && command -v jq >/dev/null || { echo "no data yet"; return; }
-  age=$(ago $(( $(date +%s) - $(date -r "$f" +%s) )))
+  age=$(ago $(( $(date +%s) - $(mtime "$f") )))
   jq -r --arg age "$age" '"5h \(.five_hour.used_percentage // "?" | if type=="number" then round else . end)% · week \(.seven_day.used_percentage // "?" | if type=="number" then round else . end)% (\($age))"' "$f"; }
 share() { # share <dir>: symlink everything shareable from ~/.claude into an account's dir
   mkdir -p "$MAIN/projects"   # conversations: shared, or a tab can't pick up one started on another account
@@ -47,9 +49,11 @@ case $1 in
   run) shift; [ -n "$1" ] || { echo "usage: claude-acct run <name> [args]" >&2; exit 2; }; for n in $(names); do [ "$n" = main ] || share "$(dir_of "$n")"; done; run "$@";;
   names) names;;
   list) for n in $(names); do printf '  %-10s %s\n' "$n" "$(usage "$n")"; done;;
-  "") i=0; for n in $(names); do i=$((i + 1)); printf '  %d) %-10s %s\n' "$i" "$n" "$(usage "$n")"; done
+  "") command -v claude-pick >/dev/null && exec claude-pick
+    i=0; for n in $(names); do i=$((i + 1)); printf '  %d) %-10s %s\n' "$i" "$n" "$(usage "$n")"; done
     printf 'Account number (Enter = main): '; read -r k
-    n=$( [ -z "$k" ] && echo main || names | sed -n "${k}p" ); [ -n "$n" ] || { echo "no such number" >&2; exit 2; }
-    run "$n";;
+    case $k in '') k=1;; *[!0-9]*|??????*) k=0;; esac   # digits only, and short enough for test(1); main is always 1
+    if [ "$k" -lt 1 ] || [ "$k" -gt "$i" ]; then echo "pick 1-$i" >&2; exit 2; fi
+    run "$(names | awk -v k="$k" 'NR == k + 0')";;
   *) sed -n 2,10p "$0"; exit 2;;
 esac

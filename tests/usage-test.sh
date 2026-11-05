@@ -50,6 +50,20 @@ echo "$out" | grep -q "  spare  .*(old: 7h ago)" || { echo "$out"; fail "7-hour-
 echo "$out" | grep "▶ main" | grep -q "old:" && fail "fresh line marked old"
 printf '%s' "$raw" | grep "  work  " | grep -q "$(printf '\033')\[2m▰" || fail "old numbers not dimmed"
 echo "ok: numbers over 6h old are dimmed and say how old"
+# macOS: BSD stat/date (no stat -c, no date -r <file>): same lines, same ages
+mkdir -p "$T/bsd"; RS=$(command -v stat); RD=$(command -v date)
+# shellcheck disable=SC2016  # the stubs' $1 / $@ are meant for the stub, not this shell
+{
+printf '#!/bin/sh\n[ "$1" = -c ] && { echo "stat: illegal option -- c" >&2; exit 1; }\n[ "$1" = -f ] && [ "$2" = %%m ] && exec %s -c %%Y "$3"\nexit 1\n' "$RS" > "$T/bsd/stat"
+printf '#!/bin/sh\n[ "$1" = -r ] && { echo "date: illegal time format" >&2; exit 1; }\nexec %s "$@"\n' "$RD" > "$T/bsd/date"
+}
+chmod +x "$T/bsd/stat" "$T/bsd/date"
+bsd=$(rm -rf "$HOME/.cache/statusline"; j '{"five_hour":{"used_percentage":40},"seven_day":{"used_percentage":91}}' | PATH=$T/bsd:$PATH sh "$SL" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+u() { grep -E '5h|week'; }   # the usage lines (the busy line follows the live load)
+if [ -z "$(echo "$out" | u)" ] || [ "$(echo "$bsd" | u)" != "$(echo "$out" | u)" ]; then echo "$bsd"; fail "BSD stat/date: usage lines differ from GNU"; fi
+cached=$(j '{}' | PATH=$T/bsd:$PATH sh "$SL" 2>&1 | sed 's/\x1b\[[0-9;]*m//g')
+[ "$cached" = "$bsd" ] || { echo "$cached"; fail "BSD stat/date: 30 s cache not reused"; }
+echo "ok: BSD stat/date (macOS): same status line, same ages, cache works"
 echo '{"site":{"name":"site","limit_pct":20,"baseline_pct":80,"carried":0},"docs":{"name":"docs","limit_pct":5,"baseline_pct":85,"carried":0}}' > "$HOME/.claude/usage-budgets.json"
 draw "$(j '{"seven_day":{"used_percentage":91}}')" | grep -q "budget site 11/20% · docs 6/5%" || fail "budgets line"
 echo "ok: claude-usage budgets show used/limit"

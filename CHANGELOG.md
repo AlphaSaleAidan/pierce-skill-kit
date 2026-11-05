@@ -14,18 +14,25 @@ your settings), then `bridge files setup`.
   says to pull first, pull keeps both. `bridge files` shows what's the same, to push or to pull.
   `bridge files push ~/Desktop/q3.pdf` copies a file in and sends it.
   `bridge files share q3.pdf 30` makes a 30-minute link, off until the server owner sets `LK_FILES_SHARE=1`.
-- **route** mod: `claude-pick` starts Claude on your least-used account (menu with each number's age, `auto`,
-  `order`), using status-line usage only. With no numbers yet it says so instead of naming a winner. Try:
-  `claude-pick auto -p "hello"`. Windows: `ssh -t me@my-server '~/.local/bin/claude-pick'`.
+- **route** mod: `claude-pick` starts Claude on whichever of your accounts has the most room (menu with each number's
+  age, `auto`, `order`), using status-line usage only. An account at 95% or more of its 5-hour or weekly window is
+  skipped with the reason (`work: 5h at 100%, resets in 2h, skipped`); if all are full, `auto` says which resets
+  first and starts nothing. With no numbers yet it says so instead of naming a winner. Bad menu input gets
+  `pick 1-N`. Works with macOS `stat`/`date`. Try: `claude-pick auto -p "hello"`. Windows:
+  `ssh -t me@my-server '~/.local/bin/claude-pick'`.
 - **usage** installer: `sh mods/usage/install.sh` is the statusline mod plus the server-busy helper, one line per
   account: `▶ main  5h ▰▰▱▱▱ 40%   week ▰▰▰▰▰ 91%` and `  work  5h ∞   week ▰▱▱▱▱ 10%`. Numbers over 6h old are
   dimmed and say `(old: 3d ago)`. ∞ only for accounts in `LK_USAGE_NO_5H`; the kit config is read as text, not run.
+  The status line now works on macOS (it used Linux-only `stat`/`date` flags and printed nothing there).
 
 ### Changed (may break a script)
 - Plain `bridge files` now shows the file store. The old listing of what `bridge sync` would send is
   `bridge sync --list`.
 
 ### Changed
+- `claude-acct` with no arguments opens `claude-pick`'s menu when the route mod is installed (one picker), and its
+  own menu answers bad input with `pick 1-N` instead of passing it to `sed`. The route installer no longer sets up
+  the skill router (the main `install.sh` already does).
 - `claude-acct` (and `claude-pick`) count a `~/.claude-<name>` folder as an account only if it holds a Claude login
   or was made by `claude-acct add`; other tools' folders such as `~/.claude-flow` are no longer listed or shared into.
 

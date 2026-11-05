@@ -31,7 +31,13 @@ sh mods/bridge/bridge setup me@my-server --name my-laptop
 export PATH="$HOME/pierce-bridge/bin:$PATH"     # add to ~/.zshrc or ~/.bashrc
 ```
 
-**Windows** (PowerShell 5.1 or 7, built-in OpenSSH; from a clone of this repo):
+**Windows** (PowerShell 5.1 or 7, built-in OpenSSH; in the repo folder). Once per PC, let your own scripts run
+(Windows blocks them by default, and marks files from a zip download as "from the internet"):
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+Get-ChildItem -Recurse | Unblock-File
+```
+Then:
 ```powershell
 powershell -ExecutionPolicy Bypass -File mods\bridge\bridge.ps1 setup me@my-server -Name my-laptop
 # then add the shortcut it prints to your profile (notepad $PROFILE):
@@ -106,9 +112,10 @@ Send one file from anywhere (it's copied into the folder first):
 ```
 bridge files push ~/Desktop/q3.pdf
 ```
-On Windows:
+On Windows, type `bridge files push ` and drag the file from Explorer into the PowerShell window to paste its path
+(your Desktop may live under OneDrive, so typing it is easy to get wrong):
 ```
-bridge files push $HOME\Desktop\q3.pdf
+bridge files push "C:\Users\you\OneDrive\Desktop\q3.pdf"
 ```
 Get what Claude made on the server:
 ```
@@ -131,8 +138,9 @@ got 1 file from the server, in C:\Users\jake\PierceFiles
 ```
 
 Good to know:
-- **Only new or changed files travel.** Up to 1 GB per push or pull. Allow about a minute per 100 MB on a
-  typical home upload. Each file is listed as it goes; there is no percentage bar.
+- **Only new or changed files travel,** in batches of up to 100 MB, each file listed as it goes (no percentage
+  bar). If the link drops, run the same command again: finished files aren't sent twice. Allow about a minute per
+  100 MB on a typical home upload.
 - **Deleting a file doesn't delete it on the other side.** Delete it in both places, or ask Claude to.
 - **Changed on both sides?** `push` won't overwrite the server's copy; it tells you to pull. `pull` keeps both: the
   server's copy takes the name and yours moves beside it as `q3.conflict-<your computer>-<time>.md`.
@@ -153,7 +161,7 @@ pushes `q3.pdf` if needed, then prints a link anyone can open for 30 minutes (de
 a random part and serves that one file only. The server owner turns this on with `LK_FILES_SHARE=1` in
 `~/.config/pierce-skill-kit/config`, and needs `cloudflared` and `python3` on the server.
 
-## What never syncs
+## What never syncs (context folder and file store)
 Matched against every part of the path, case-insensitive, on **both** sides (the laptop never sends them, the
 server drops them from anything it receives and never sends them):
 
@@ -164,7 +172,7 @@ server drops them from anything it receives and never sends them):
 **Only names are checked, never file contents.** A key pasted into `notes.md` will sync. Keep secrets out of the
 folder.
 
-Also: files over **1 MB** are skipped with a note, and a sync over **50 MB** total is refused. Links and special
+In the context folder, files over **1 MB** are skipped with a note and a sync over **50 MB** total is refused (the file store allows 100 MB a file). Links and special
 files never sync. Both sides refuse an archive before unpacking anything if it is compressed (gzip/xz/bzip2...),
 lists a file over 1 MB or more than 50 MB in total, has over 5000 entries, or holds a link, an absolute path, `..`,
 `\` or `:`. Neither side writes through a folder that is a link: such a file is saved at the top of the folder as

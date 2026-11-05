@@ -5,6 +5,7 @@
 # Settings: "statusLine": { "type": "command", "command": "sh <this file>" }   Needs: jq. Optional: STATUSLINE_EXTRA
 # (a command whose output is appended to line 1, fed the same JSON on stdin).
 here=$(cd "$(dirname "$0")" && pwd)
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0; }   # GNU, then BSD/macOS
 in=$(cat)
 dir=$(printf '%s' "$in" | jq -r '.workspace.current_dir // empty'); dir=${dir:-$PWD}
 model=$(printf '%s' "$in" | jq -r '.model.display_name // empty')
@@ -14,7 +15,7 @@ acct_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; acct_dir=${acct_dir%/}; acct=${acc
 rl=$(printf '%s' "$in" | jq -c '.rate_limits // empty' 2>/dev/null)
 if [ -n "$rl" ] && [ "$rl" != "{}" ]; then u=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit; mkdir -p "$u"; printf '%s' "$rl" > "$u/usage-$acct.json"; fi
 ck=$cache/$(printf '%s|%s|%s' "$dir" "$model" "${CLAUDE_CONFIG_DIR:-default}" | cksum | cut -d' ' -f1)
-if [ -f "$ck" ] && [ $(( $(date +%s) - $(stat -c %Y "$ck") )) -lt 30 ]; then cat "$ck"; exit 0; fi
+if [ -f "$ck" ] && [ $(( $(date +%s) - $(mtime "$ck") )) -lt 30 ]; then cat "$ck"; exit 0; fi
 exec 3>&1 1>"$ck.$$"
 br=$(git -C "$dir" branch --show-current 2>/dev/null)
 dirty=$(git -C "$dir" status --porcelain 2>/dev/null | wc -l)
@@ -30,7 +31,7 @@ printf '%b   %s' "$line1" "$extra"
 # and marked "(old: 7h ago)". The kit config is read as text (one sed), never run as shell.
 no5h=${LK_USAGE_NO_5H-$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}LK_USAGE_NO_5H=//p' "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" 2>/dev/null | tail -1 | tr -d "\"'")}
 usage=$(for f in "${XDG_CACHE_HOME:-$HOME/.cache}"/pierce-skill-kit/usage-*.json; do
-    [ -s "$f" ] && jq -c --arg f "${f##*/}" --argjson m "$(date -r "$f" +%s)" '{n: ($f | sub("^usage-"; "") | sub("\\.json$"; "")), m: $m, r: .}' "$f" 2>/dev/null
+    [ -s "$f" ] && jq -c --arg f "${f##*/}" --argjson m "$(mtime "$f")" '{n: ($f | sub("^usage-"; "") | sub("\\.json$"; "")), m: $m, r: .}' "$f" 2>/dev/null
   done | jq -rn --argjson now "$(date +%s)" --arg cur "$acct" --arg no5h " $no5h " '
   def bar(p): ([5, ((p // 0) / 20 | round)] | min) as $n | ("▰" * $n) + ("▱" * (5 - $n));
   def col(p; old): if old then "\u001b[2m" elif p >= 85 then "\u001b[31m" elif p >= 60 then "\u001b[33m" else "\u001b[32m" end;
@@ -59,7 +60,7 @@ wk=$(printf '%s' "$in" | jq '.rate_limits.seven_day.used_percentage // empty' 2>
 # Hub counts, if the projects-hub mod is installed next to this one; refreshed in the background every 5 min.
 hub=${HUB_CACHE:-$HOME/.cache/projects-hub.json}; gather=$here/../projects-hub/bin/gather.py
 if [ -f "$gather" ]; then
-  age=$(( $(date +%s) - $(stat -c %Y "$hub" 2>/dev/null || echo 0) ))
+  age=$(( $(date +%s) - $(mtime "$hub") ))
   [ "$age" -gt 300 ] && setsid nohup python3 "$gather" >/dev/null 2>&1 < /dev/null &
   [ -s "$hub" ] && printf '\n%s' "$(jq -r '"\([.sessions[]|select(.live)]|length) open sessions · \(.prs|length) PRs · \(.projects|length) active · \(.services|length) ports"' "$hub")"
 fi

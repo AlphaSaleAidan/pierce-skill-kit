@@ -1,48 +1,69 @@
 #!/bin/sh
-# claude-pick - start Claude on the least-used of your accounts, using the usage each account's status line saved.
-#   claude-pick                menu, least-used first (Enter = least used)
-#   claude-pick auto [args]    no menu: start Claude on the least-used account (args go to claude, e.g. -p "...")
-#   claude-pick order          print account config folders, least-used first (for scripts)
+# claude-pick - start Claude on whichever of your accounts has the most room left, from the usage its status line saved.
+#   claude-pick                menu, most room first (Enter = the top one)
+#   claude-pick auto [args]    no menu: start Claude on the account with the most room (args go to claude, e.g. -p "...")
+#   claude-pick order          print account config folders, most room first (for scripts)
 #   claude-pick add <name>     same as claude-acct add
 #   claude-pick <name> [args]  same as claude-acct run
-# Least used = lowest weekly %, then lowest 5-hour %. An account with no saved numbers yet goes last; a window that
-# has already reset counts as 0%. Numbers are only what Claude Code passed to the kit status line (rate_limits),
-# saved per account in ~/.cache/pierce-skill-kit/usage-<name>.json. No login is read and no API is called.
+# Most room = lowest weekly %, then lowest 5-hour %. An account at 95% or more of its 5-hour or weekly window (not yet
+# reset) is full: it goes last, is never picked by auto, and the menu says when it resets. If every account is full,
+# auto says which resets first and exits 1 without starting Claude. A window that already reset counts as 0%; an
+# account with no saved numbers yet goes after the ones with numbers. Numbers are only what Claude Code passed to the
+# kit status line (rate_limits), saved per account in ~/.cache/pierce-skill-kit/usage-<name>.json. No login is read
+# and no API is called. Use only accounts you're entitled to use, under your plan's terms.
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit
 NODATA="No usage numbers yet: install the usage status line (sh mods/usage/install.sh) and open each account once."
 command -v jq >/dev/null || { echo "claude-pick needs jq" >&2; exit 1; }
 ACCT=$(command -v claude-acct) || { echo "claude-pick needs claude-acct (the kit's core install)" >&2; exit 1; }
 dir_of() { [ "$1" = main ] && echo "$HOME/.claude" || echo "$HOME/.claude-$1"; }
-ranked() { # "name week 5h age" per account, least used first (999 = no data, age in seconds or -); stable: main wins ties
+mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }   # GNU, then BSD/macOS
+# "name full week 5h age until why..." per account, most room first. full = 1 when a window is at >= 95%; until = when
+# it is usable again (epoch, 0 = unknown); why = "5h at 100%, resets in 2h". 999 = no data, age in seconds or -.
+ranked() {
   for n in $("$ACCT" names); do
     f=$CACHE/usage-$n.json
-    if [ -s "$f" ]; then a=$(( $(date +%s) - $(date -r "$f" +%s) )); jq -r --arg n "$n" --arg a "$a" --argjson now "$(date +%s)" '
+    if [ -s "$f" ]; then now=$(date +%s); a=$(( now - $(mtime "$f") )); jq -r --arg n "$n" --arg a "$a" --argjson now "$now" '
       def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null;
       def pct(w): if w == null or w.used_percentage == null then null
         elif (ts(w.resets_at) // ($now + 1)) < $now then 0 else (w.used_percentage | round) end;
-      "\($n) \(pct(.seven_day) // 999) \(pct(.five_hour) // (if .seven_day then 0 else 999 end)) \($a)"' "$f" 2>/dev/null || echo "$n 999 999 -"
-    else echo "$n 999 999 -"; fi
-  done | sort -s -k2,2n -k3,3n; }
+      def dur(s): ([0, s / 60 | floor] | max) as $m
+        | if $m >= 1440 then "\($m / 1440 | floor)d\($m % 1440 / 60 | floor)h" elif $m >= 60 then "\($m / 60 | floor)h" else "\($m)m" end;
+      def full(l; w): pct(w) as $p | if $p != null and $p >= 95 then ts(w.resets_at) as $t
+        | {u: ($t // 0), why: "\(l) at \($p)%, \(if $t then "resets in \(dur($t - $now))" else "reset time unknown" end)"} else empty end;
+      [full("week"; .seven_day), full("5h"; .five_hour)] as $b
+      | "\($n) \(if ($b | length) > 0 then 1 else 0 end) \(pct(.seven_day) // 999) \(pct(.five_hour) // (if .seven_day then 0 else 999 end)) \($a) \(([$b[].u] | max) // 0) \($b[0].why // "")"' \
+      "$f" 2>/dev/null || echo "$n 0 999 999 - 0"
+    else echo "$n 0 999 999 - 0"; fi
+  done | sort -s -k2,2n -k3,3n -k4,4n; }
 show() { [ "$1" = 999 ] && echo "?" || echo "$1%"; }
 ago() { case $1 in -) ;; *) if [ "$1" -lt 60 ]; then echo "(just now)"; elif [ "$1" -lt 3600 ]; then echo "($(($1 / 60))m ago)"; elif [ "$1" -lt 86400 ]; then echo "($(($1 / 3600))h ago)"
   else echo "($(($1 / 86400))d ago)"; fi;; esac; }
-nodata() { ! awk '$2 != 999 || $3 != 999 { f = 1 } END { exit !f }'; }   # stdin: ranked lines; true when no account has a number
+nodata() { ! awk '$3 != 999 || $4 != 999 { f = 1 } END { exit !f }'; }   # stdin: ranked lines; true when no account has a number
+first_reset() { awk '$2 == 1' | sort -k6,6n | awk '{ n = $1; $1 = $2 = $3 = $4 = $5 = $6 = ""; sub(/^ +/, ""); print n " (" $0 ")"; exit }'; }
 
 case $1 in
-  order) ranked | while read -r n _ _ _; do dir_of "$n"; done;;
-  auto) shift; n=$(ranked | head -1 | cut -d' ' -f1)
-    if ranked | nodata; then echo "claude-pick: $NODATA Starting $n (the first account)." >&2; else echo "claude-pick: $n (least used)" >&2; fi
+  order) ranked | while read -r n _; do dir_of "$n"; done;;
+  auto) shift; r=$(ranked)
+    printf '%s\n' "$r" | awk '$2 == 1 { n = $1; $1 = $2 = $3 = $4 = $5 = $6 = ""; sub(/^ +/, ""); print "claude-pick: " n ": " $0 ", skipped" }' >&2
+    n=$(printf '%s\n' "$r" | awk '$2 == 0 { print $1; exit }')
+    [ -n "$n" ] || { echo "claude-pick: every account is full; $(printf '%s\n' "$r" | first_reset) resets first. Not starting Claude." >&2; exit 1; }
+    if printf '%s\n' "$r" | nodata; then echo "claude-pick: $NODATA Starting $n (the first account)." >&2; else echo "claude-pick: $n (most room)" >&2; fi
     exec "$ACCT" run "$n" "$@";;
   add) shift; exec "$ACCT" add "$@";;
-  -h|--help) sed -n 2,10p "$0";;
-  "") t=$(mktemp) || exit 1; trap 'rm -f "$t"' EXIT; ranked > "$t"; win=1; nodata < "$t" && { echo "$NODATA"; win=0; }
-    i=0; while read -r n w h a; do i=$((i + 1))
-      printf '  %d) %-10s week %-4s 5h %-4s %-10s%s\n' "$i" "$n" "$(show "$w")" "$(show "$h")" "$(ago "$a")" \
-        "$([ "$i$win" = 11 ] && echo ' <- least used')"
+  -h|--help) sed -n 2,13p "$0";;
+  -*) sed -n 2,7p "$0" >&2; exit 2;;
+  "") t=$(mktemp) || exit 1; trap 'rm -f "$t"' EXIT; ranked > "$t"; N=$(wc -l < "$t" | tr -d ' ')
+    win=1; nodata < "$t" && { echo "$NODATA"; win=0; }
+    awk '$2 == 0 { f = 1 } END { exit f }' "$t" && { echo "Every account is full; $(first_reset < "$t") resets first."; win=0; }
+    i=0; while read -r n full w h a _ why; do i=$((i + 1))
+      mark=; [ "$i$win" = 11 ] && mark='  <- most room'
+      printf '  %d) %-8s week %-4s 5h %-4s %-10s%s\n' "$i" "$n" "$(show "$w")" "$(show "$h")" "$(ago "$a")" "$mark"
+      [ "$full" = 1 ] && printf '     full: %s\n' "$why"
     done < "$t" | sed 's/ *$//'
-    printf 'Account number (Enter = %s): ' "$([ $win = 1 ] && echo 'least used' || echo 1)"; read -r k; case $k in *[!0-9]*) k=0;; esac
-    n=$(sed -n "${k:-1}p" "$t" | cut -d' ' -f1); rm -f "$t"
-    [ -n "$n" ] || { echo "no such number" >&2; exit 2; }
+    printf 'Account number (Enter = %s): ' "$([ $win = 1 ] && echo 'most room' || echo 1)"; read -r k
+    case $k in '') k=1;; *[!0-9]*|??????*) k=0;; esac   # digits only, and short enough for test(1)
+    if [ "$k" -lt 1 ] || [ "$k" -gt "$N" ]; then echo "pick 1-$N" >&2; exit 2; fi
+    n=$(awk -v k="$k" 'NR == k + 0 { print $1 }' "$t"); rm -f "$t"
     exec "$ACCT" run "$n";;
   *) exec "$ACCT" run "$@";;
 esac

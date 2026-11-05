@@ -23,7 +23,8 @@ MAX_TOTAL=52428800    # 50 MB per sync
 MAX_MSG=8192
 MAX_ENTRIES=5000     # per archive
 FILES_MAX_FILE=104857600     # file store: 100 MB per file
-FILES_MAX_TOTAL=1073741824   # file store: 1 GB per push or pull
+FILES_MAX_TOTAL=1073741824   # file store: 1 GB per ssh call (the server's limit)
+FILES_BATCH=${FILES_BATCH:-104857600}        # file store: files go in batches of up to 100 MB, so a dropped link only loses one batch
 DIR=${BRIDGE_DIR:-$HOME/pierce-bridge}
 
 die() { echo "bridge: $*" >&2; exit 1; }
@@ -53,8 +54,9 @@ list_files() { # list_files <dir>: files that may sync (relative paths); skipped
 pack() { # pack <dir> <list> <out.tar>: tar the listed files, refusing anything over the 50 MB total cap
   total=0
   while IFS= read -r f; do total=$((total + $(wc -c < "$1/$f"))); done < "$2"
-  [ "$total" -le $MAX_TOTAL ] || { echo "bridge: refusing to sync: $total bytes is over the $((MAX_TOTAL / 1048576)) MB total cap" >&2; return 1; }
-  COPYFILE_DISABLE=1 tar -cf "$3" -C "$1" -T "$2"
+  [ "$total" -le $MAX_TOTAL ] || { echo "bridge: refusing: $((total / 1048576)) MB is over the $((MAX_TOTAL / 1048576)) MB cap for one transfer" >&2; return 1; }
+  sed 's|^|./|' "$2" > "$2.dot"   # ./ first: a name starting with - is never read as a tar option
+  COPYFILE_DISABLE=1 tar -cf "$3" -C "$1" -T "$2.dot"
 }
 
 unpack() { # unpack <tar> <dir>: plain uncompressed tar of files and folders, caps checked BEFORE anything is extracted
@@ -73,7 +75,7 @@ unpack() { # unpack <tar> <dir>: plain uncompressed tar of files and folders, ca
 
 safe_dest() ( # safe_dest <root> <relative path>: no folder on the way is a link, and it resolves inside root
   p=$1; IFS=/; set -f
-  for part in $(dirname "$2"); do [ "$part" = . ] && continue; p=$p/$part; [ -L "$p" ] && exit 1; done
+  for part in $(dirname "./$2"); do [ "$part" = . ] && continue; p=$p/$part; [ -L "$p" ] && exit 1; done
   d=$(dirname "$1/$2"); [ -d "$d" ] || exit 0
   command -v realpath >/dev/null || exit 0
   r=$(realpath "$1"); case $(realpath "$d") in "$r"|"$r"/*) exit 0;; esac; exit 1 )
@@ -83,7 +85,7 @@ clean() { LC_ALL=C tr -d '\000-\010\013-\037\177' | LC_ALL=C sed "s/$(printf '\3
 
 hash() { [ -f "$1" ] || return 0; { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1; }
 nfiles() { if [ "$1" = 1 ]; then echo "1 file"; else echo "$1 files"; fi; }
-manifest() { list_files "$1" | while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(hash "$1/$f")"; done; }   # path<TAB>sha256
+manifest() { list_files "$1" | while IFS= read -r f; do printf '%s\t%s\t%s\n' "$f" "$(hash "$1/$f")" "$(wc -c < "$1/$f" | tr -d ' ')"; done; }   # path<TAB>sha256<TAB>bytes
 bigcaps() { MAX_FILE=$FILES_MAX_FILE; MAX_TOTAL=$FILES_MAX_TOTAL; }
 keep() { # keep <root> <rel> <trash>: move the copy about to be replaced into <trash>/<time>/<rel>, so nothing is lost
   [ -f "$1/$2" ] || return 0; k=$3/$(date -u +%Y%m%dT%H%M%SZ)/$2; mkdir -p "$(dirname "$k")" && mv "$1/$2" "$k"; }
@@ -186,7 +188,7 @@ serve_files_share() { # stdin: one stored path. A random link to that one file f
   f=$(head -c 4096 | head -n 1)
   list_files "$FILES" 2>/dev/null | grep -qxF -- "$f" || refuse "not in the file store: $f (push it first)"
   d=$(mktemp -d "$STATE/share.XXXXXX"); tok=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
-  name=$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _); mkdir -p "$d/www/$tok"
+  name=$(printf '%s\n' "${f##*/}" | tr -c 'A-Za-z0-9._\n-' _); mkdir -p "$d/www/$tok"
   : > "$d/www/index.html"; : > "$d/www/$tok/index.html"   # no folder listings: the link only works with the exact name
   cp "$FILES/$f" "$d/www/$tok/$name"; chmod -R go-rwx "$d"
   port=$(awk 'BEGIN { srand(); print 20000 + int(rand() * 40000) }')
@@ -275,14 +277,15 @@ scoped() { [ -z "$scope" ] || case $1 in "$scope"|"$scope"/*) ;; *) return 1;; e
 hsize() { awk -v b="$1" 'BEGIN { if (b >= 1048576) printf "%.1f MB", b / 1048576; else if (b >= 1024) printf "%d KB", b / 1024; else printf "%d bytes", b }'; }
 files_scope() { # files_scope push|pull [path]: set $scope (relative to the store). push: a file from elsewhere is copied in first
   scope=; [ -n "${2:-}" ] || return 0
-  if [ -f "$2" ] && a=$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) false;; esac; then
+  case $2 in /*) q=$2;; *) q=./$2;; esac   # ./ first: a name starting with - is never read as an option
+  if [ -f "$2" ] && a=$(cd "$(dirname "$q")" && pwd -P)/$(basename "$q") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) false;; esac; then
     [ "$1" = push ] || die "$2 is not in $FILES. Pull takes a path inside the store, e.g. bridge files pull clients"
-    b=$(basename "$2"); ! denied "$b" || die "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer"
+    b=$(basename "$q"); ! denied "$b" || die "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer"
     [ "$(wc -c < "$2")" -le $MAX_FILE ] || die "$b is over the 100 MB cap"
     [ -f "$FILES/$b" ] && echo "replaced $b in $FILES (old copy in $DIR/files-trash)"
     keep "$FILES" "$b" "$DIR/files-trash"; cp "$2" "$FILES/$b" && echo "copied $b into $FILES"; scope=$b; return 0
   fi
-  [ -e "$2" ] && a=$(cd "$(dirname "$2")" && pwd -P)/$(basename "$2") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) scope=${a#"$r"/}; return 0;; esac
+  [ -e "$2" ] && a=$(cd "$(dirname "$q")" && pwd -P)/$(basename "$q") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) scope=${a#"$r"/}; return 0;; esac
   scope=${2%/}; case $scope in /*|*..*|*\\*) die "refused path: $2";; esac
 }
 files_plan() { # files_plan: fills $t/mine, $t/srv, $t/plan (action<TAB>path: same|up|down|both), $t/skip
@@ -305,14 +308,22 @@ warn_secrets() { # say once per file what stays home
     scoped "$f" && denied "$f" && ! grep -qxF -- "$f" "$DIR/files-warned" && { echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; printf '%s\n' "$f" >> "$DIR/files-warned"; }
   done; }
 files_status() {
-  t=$(mktemp -d); files_scope pull "${1:-}"; files_plan
+  t=$(mktemp -d); files_scope pull "${1:-}"; files_plan; nope
   cat "$t/skip" >&2
   [ -s "$t/plan" ] || { echo "the file store is empty: put files in $FILES, then bridge files push"; cleanup "$t"; return 0; }
   awk -F'\t' '{ w = ($1 == "same") ? "same     " : ($1 == "up") ? "to push  " : ($1 == "down") ? "to pull  " : "CHANGED BOTH SIDES (pull keeps both)  "; print "  " w " " $2 }' "$t/plan"
   cleanup "$t"
 }
+batches() { # batches <manifest> <list>: split the list into $t/b.0, b.1 ... of up to FILES_BATCH bytes; prints the count
+  rm -f "$t"/b.*
+  awk -F'\t' -v cap="$FILES_BATCH" -v d="$t" 'FILENAME == ARGV[1] { sz[$1] = $3; next }
+    { s = sz[$0] + 0; if (n && tot + s > cap) { b++; tot = 0; n = 0 } print > (d "/b." (b + 0)); tot += s; n++ }' "$1" "$2"
+  ls "$t" | grep -c '^b\.'
+}
+nope() { # the path matches nothing here or on the server
+  [ -n "$scope" ] && [ ! -s "$t/plan" ] && { cleanup "$t"; die "no file or folder called $scope in $FILES or on the server"; }; return 0; }
 files_push() {
-  files_scope push "${1:-}"; t=$(mktemp -d); files_plan; warn_secrets
+  files_scope push "${1:-}"; t=$(mktemp -d); files_plan; nope; warn_secrets
   cat "$t/skip" >&2
   awk -F'\t' '$1 == "both" { print $2 }' "$t/plan" | while IFS= read -r f; do
     echo "bridge: not sent: $f changed here AND on the server. Run  bridge files pull  first (it keeps both copies)" >&2; done
@@ -323,31 +334,38 @@ files_push() {
     [ -n "${quiet:-}" ] || if [ "$sk" -gt 0 ] || [ "$bo" -gt 0 ]; then echo "nothing else to send"; else echo "up to date: the server already has ${scope:-everything in $FILES}"; fi
     cleanup "$t"; return 0
   fi
-  while IFS= read -r f; do echo "  sending $f ($(hsize "$(wc -c < "$FILES/$f")"))"; done < "$t/up"
-  pack "$FILES" "$t/up" "$t/up.tar" || { cleanup "$t"; exit 1; }
-  remote files-put "$BRIDGE_NAME" < "$t/up.tar" || { cleanup "$t"; die "push failed"; }
-  agree "$t/mine" "$t/up"
+  nb=$(batches "$t/mine" "$t/up"); total=$(wc -l < "$t/up" | tr -d ' '); done_n=0; i=0
+  while [ $i -lt "$nb" ]; do
+    while IFS= read -r f; do echo "  sending $f ($(hsize "$(wc -c < "$FILES/$f")"))"; done < "$t/b.$i"
+    pack "$FILES" "$t/b.$i" "$t/up.tar" || { cleanup "$t"; exit 1; }
+    remote files-put "$BRIDGE_NAME" < "$t/up.tar" > /dev/null || { cleanup "$t"; die "push stopped after $(nfiles $done_n) of $total. Run it again to send the rest (finished files aren't sent twice)"; }
+    agree "$t/mine" "$t/b.$i"; done_n=$((done_n + $(wc -l < "$t/b.$i"))); i=$((i + 1))
+  done
+  echo "sent $(nfiles $done_n) to the server"
   cleanup "$t"
 }
 files_pull() {
-  files_scope pull "${1:-}"; t=$(mktemp -d); files_plan
+  files_scope pull "${1:-}"; t=$(mktemp -d); files_plan; nope
   awk -F'\t' '$1 == "down" || $1 == "both" { print $2 }' "$t/plan" > "$t/want"
   awk -F'\t' '$1 == "same" { print $2 }' "$t/plan" > "$t/same"; [ -s "$t/same" ] && agree "$t/srv" "$t/same"
   [ -s "$t/want" ] || { echo "up to date: nothing new on the server"; cleanup "$t"; return 0; }
-  remote files-get < "$t/want" > "$t/down.tar" || { cleanup "$t"; die "pull failed"; }
-  unpack "$t/down.tar" "$t/d" || { cleanup "$t"; exit 1; }
-  list_files "$t/d" > "$t/got"; n=0; : > "$t/ok"
-  while IFS= read -r f; do
-    safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link here; not written" >&2; continue; }
-    if grep -qxF -- "both	$f" "$t/plan"; then   # changed on both sides: the server copy takes the name, yours moves beside it
-      d=$(dirname "$f"); b=$(basename "$f"); case $b in ?*.*) st=${b%.*}; ex=.${b##*.};; *) st=$b; ex=;; esac
-      c=$st.conflict-$BRIDGE_NAME-$(date -u +%Y%m%dT%H%M%SZ)$ex; [ "$d" = . ] || c=$d/$c
-      mv "$FILES/$f" "$FILES/$c" && echo "  kept both: $f (yours: $c)"
-    else keep "$FILES" "$f" "$DIR/files-trash"; fi
-    mkdir -p "$(dirname "$FILES/$f")" && cp "$t/d/$f" "$FILES/$f" && n=$((n + 1)) && printf '%s\n' "$f" >> "$t/ok"
-    grep -qxF -- "both	$f" "$t/plan" || echo "  got $f ($(hsize "$(wc -c < "$FILES/$f")"))"
-  done < "$t/got"
-  [ -s "$t/ok" ] && agree "$t/srv" "$t/ok"
+  nb=$(batches "$t/srv" "$t/want"); total=$(wc -l < "$t/want" | tr -d ' '); n=0; i=0
+  while [ $i -lt "$nb" ]; do
+    rm -rf "$t/d"
+    { remote files-get < "$t/b.$i" > "$t/down.tar" && unpack "$t/down.tar" "$t/d"; } || { cleanup "$t"; die "pull stopped after $(nfiles $n) of $total. Run it again to get the rest (finished files aren't fetched twice)"; }
+    list_files "$t/d" > "$t/got"; : > "$t/ok"
+    while IFS= read -r f; do
+      safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link here; not written" >&2; continue; }
+      if grep -qxF -- "both	$f" "$t/plan"; then   # changed on both sides: the server copy takes the name, yours moves beside it
+        case $f in */*) d=${f%/*}; b=${f##*/};; *) d=.; b=$f;; esac; case $b in ?*.*) st=${b%.*}; ex=.${b##*.};; *) st=$b; ex=;; esac
+        c=$st.conflict-$BRIDGE_NAME-$(date -u +%Y%m%dT%H%M%SZ)$ex; [ "$d" = . ] || c=$d/$c
+        mv "$FILES/$f" "$FILES/$c" && echo "  kept both: $f (yours: $c)"
+      else keep "$FILES" "$f" "$DIR/files-trash"; fi
+      mkdir -p "$(dirname "$FILES/$f")" && cp "$t/d/$f" "$FILES/$f" && n=$((n + 1)) && printf '%s\n' "$f" >> "$t/ok"
+      grep -qxF -- "both	$f" "$t/plan" || echo "  got $f ($(hsize "$(wc -c < "$FILES/$f")"))"
+    done < "$t/got"
+    [ -s "$t/ok" ] && agree "$t/srv" "$t/ok"; i=$((i + 1))
+  done
   echo "got $(nfiles $n) from the server, in $FILES"
   cleanup "$t"
 }
