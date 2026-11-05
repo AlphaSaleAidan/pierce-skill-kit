@@ -44,7 +44,7 @@ list_files() { # list_files <dir>: files that may sync (relative paths); skipped
   ( cd "$1" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do
       denied "$f" && continue
       s=$(wc -c < "$f" | tr -d ' ')
-      [ "$s" -le $MAX_FILE ] || { echo "bridge: not synced: $f ($s bytes, over the $((MAX_FILE / 1048576)) MB cap)" >&2; continue; }
+      [ "$s" -le $MAX_FILE ] || { echo "bridge: skipped $f: $(((s + 1048575) / 1048576)) MB, over the $((MAX_FILE / 1048576)) MB cap" >&2; continue; }
       printf '%s\n' "$f"
     done )
 }
@@ -80,6 +80,7 @@ cleanup() { chmod -R u+rwX "$1" 2>/dev/null; rm -rf "$1"; }
 clean() { LC_ALL=C tr -d '\000-\010\013-\037\177' | LC_ALL=C sed "s/$(printf '\302')[$(printf '\200')-$(printf '\237')]//g"; }
 
 hash() { [ -f "$1" ] || return 0; { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1; }
+nfiles() { if [ "$1" = 1 ]; then echo "1 file"; else echo "$1 files"; fi; }
 manifest() { list_files "$1" | while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(hash "$1/$f")"; done; }   # path<TAB>sha256
 bigcaps() { MAX_FILE=$FILES_MAX_FILE; MAX_TOTAL=$FILES_MAX_TOTAL; }
 keep() { # keep <root> <rel> <trash>: move the copy about to be replaced into <trash>/<time>/<rel>, so nothing is lost
@@ -166,7 +167,7 @@ serve_files_put() { # stdin: tar of new/changed files. A copy it replaces goes t
     [ "$(hash "$FILES/$f")" = "$(hash "$t/in/$f")" ] && continue
     keep "$FILES" "$f" "$STATE/files-trash" && mkdir -p "$(dirname "$FILES/$f")" && cp "$t/in/$f" "$FILES/$f" && n=$((n + 1))
   done < "$t/l"
-  slog "files-put $1: $n files"; echo "stored $n files on the server ($FILES)"
+  slog "files-put $1: $n files"; echo "sent $(nfiles $n) to the server"
 }
 
 serve_files_get() { # stdin: wanted paths, one per line. Only files the store would list are sent (no links, no deny-list).
@@ -282,9 +283,11 @@ files_scope() { # files_scope [path]: set $scope (relative to the store); a file
 files_push() {
   files_scope "${1:-}"; t=$(mktemp -d)
   remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
+  ( cd "$FILES" && find . -type f | sed 's|^\./||' ) | while IFS= read -r f; do   # say what stays home, never silently
+    scoped "$f" && denied "$f" && echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; done
   manifest "$FILES" > "$t/mine"
   while IFS="$(printf '\t')" read -r f h; do scoped "$f" && ! grep -qxF -- "$f	$h" "$t/srv" && printf '%s\n' "$f"; done < "$t/mine" > "$t/up"
-  [ -s "$t/up" ] || { echo "nothing to push: the server already has ${scope:-everything in $FILES}"; cleanup "$t"; return 0; }
+  [ -s "$t/up" ] || { [ -n "${quiet:-}" ] || echo "up to date: the server already has ${scope:-everything in $FILES}"; cleanup "$t"; return 0; }
   pack "$FILES" "$t/up" "$t/up.tar" || { cleanup "$t"; exit 1; }
   remote files-put "$BRIDGE_NAME" < "$t/up.tar" || { cleanup "$t"; die "push failed"; }
   cleanup "$t"
@@ -294,16 +297,16 @@ files_pull() {
   remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
   manifest "$FILES" > "$t/mine" 2>/dev/null
   while IFS="$(printf '\t')" read -r f h; do scoped "$f" && ! grep -qxF -- "$f	$h" "$t/mine" && printf '%s\n' "$f"; done < "$t/srv" > "$t/want"
-  [ -s "$t/want" ] || { echo "nothing new on the server"; cleanup "$t"; return 0; }
+  [ -s "$t/want" ] || { echo "up to date: nothing new on the server"; cleanup "$t"; return 0; }
   remote files-get < "$t/want" > "$t/down.tar" || { cleanup "$t"; die "pull failed"; }
   unpack "$t/down.tar" "$t/d" || { cleanup "$t"; exit 1; }
-  list_files "$t/d" > "$t/got"; n=0; kept=0
+  list_files "$t/d" > "$t/got"; n=0
   while IFS= read -r f; do
     safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link here; not written" >&2; continue; }
-    [ -f "$FILES/$f" ] && kept=1
+    [ -f "$FILES/$f" ] && echo "replaced $f (your old copy is in $DIR/files-trash)"
     keep "$FILES" "$f" "$DIR/files-trash" && mkdir -p "$(dirname "$FILES/$f")" && cp "$t/d/$f" "$FILES/$f" && n=$((n + 1))
   done < "$t/got"
-  echo "pulled $n files into $FILES"; [ $kept = 0 ] || echo "your old copies of the replaced files are in $DIR/files-trash"
+  echo "got $(nfiles $n) from the server, in $FILES"
   cleanup "$t"
 }
 
@@ -381,7 +384,8 @@ main() {
       else list_files "$BRIDGE_CONTEXT"; fi;;
     files) sub=${1:-}; [ $# -gt 0 ] && shift
       case $sub in
-        '') load_config; list_files "$BRIDGE_CONTEXT";;
+        '') load_config; echo "(context folder: what bridge sync would send. For the file store: bridge files push | pull | share)" >&2
+          list_files "$BRIDGE_CONTEXT";;
         setup) load_config; f=${1:-$HOME/PierceFiles}; mkdir -p "$f" && f=$(cd "$f" && pwd -P) || die "can't use $f"
           grep -v '^BRIDGE_FILES=' "$DIR/config" > "$DIR/config.new"; printf 'BRIDGE_FILES=%s\n' "$f" >> "$DIR/config.new"; mv "$DIR/config.new" "$DIR/config"
           BRIDGE_FILES=$f; FILES=$f; t=$(mktemp)
@@ -391,7 +395,7 @@ main() {
         push) files_cfg; files_push "$@";;
         pull) files_cfg; files_pull "$@";;
         share) files_cfg; [ -n "${1:-}" ] || die "usage: bridge files share <path> [minutes, default 60]"
-          files_push "$1"; m=${2:-60}; t=$(mktemp)
+          quiet=1 files_push "$1"; m=${2:-60}; t=$(mktemp)
           printf '%s\n' "$scope" | remote files-share "$m" 2> "$t" || { cat "$t" >&2; rm -f "$t"; die "no link made"; }; cat "$t" >&2; rm -f "$t";;
         *) die "usage: bridge files [setup [folder] | push [path] | pull [path] | share <path> [minutes]]";;
       esac;;

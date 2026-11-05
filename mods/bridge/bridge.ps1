@@ -39,7 +39,7 @@ function Get-SyncFiles([string]$root) {   # relative paths ('/' separated) that 
     if ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
     $rel = $f.FullName.Substring($full.Length + 1).Replace('\', '/')
     if (Test-Denied $rel) { continue }
-    if ($f.Length -gt $MaxFile) { [Console]::Error.WriteLine("bridge: not synced: $rel ($($f.Length) bytes, over the $($MaxFile / 1MB) MB cap)"); continue }
+    if ($f.Length -gt $MaxFile) { [Console]::Error.WriteLine("bridge: skipped ${rel}: $([Math]::Ceiling($f.Length / 1MB)) MB, over the $($MaxFile / 1MB) MB cap"); continue }
     $out.Add($rel)
   }
   $sorted = [string[]]@($out | Sort-Object -CaseSensitive)
@@ -192,35 +192,41 @@ function Get-Scope($c, [string]$p) {  # a path inside the store -> relative; a f
   if ($s.StartsWith('/') -or $s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }
   return $s
 }
-function Push-Files($c, [string]$p) {
+function Get-Count([int]$n) { if ($n -eq 1) { return '1 file' } return "$n files" }
+function Push-Files($c, [string]$p, [bool]$quiet = $false) {
   $script:Scope = Get-Scope $c $p; $root = $c.BRIDGE_FILES
+  $full = (Resolve-Path -LiteralPath $root).ProviderPath.TrimEnd('\', '/')
+  foreach ($f in Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue) {   # say what stays home
+    $rel = $f.FullName.Substring($full.Length + 1).Replace('\', '/')
+    if ((Test-InScope $rel $script:Scope) -and (Test-Denied $rel)) { [Console]::Error.WriteLine("bridge: kept on this computer (looks like a secret or key): $rel") }
+  }
   $srv = Get-ServerFiles $c; $mine = Get-Manifest $root
   $up = [string[]]@($mine.Keys | Where-Object { (Test-InScope $_ $script:Scope) -and -not ($srv.ContainsKey($_) -and $srv[$_] -eq $mine[$_]) } | Sort-Object -CaseSensitive)
-  if (-not $up.Count) { Write-Output "nothing to push: the server already has $(if ($script:Scope) { $script:Scope } else { "everything in $root" })"; return }
+  if (-not $up.Count) { if (-not $quiet) { Write-Output "up to date: the server already has $(if ($script:Scope) { $script:Scope } else { "everything in $root" })" }; return }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
     New-Pack $root $up "$t/up.tar"
     $r = Invoke-Remote $c "files-put $($c.BRIDGE_NAME)" -InFile "$t/up.tar"; if ($r.Code) { Fail 'push failed' }
-    Write-Output $r.Out.Trim()
+    Write-Output (Get-Clean $r.Out.Trim())
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
 function Pull-Files($c, [string]$p) {
   $scope = Get-Scope $c $p; $root = $c.BRIDGE_FILES
   $srv = Get-ServerFiles $c; $mine = Get-Manifest $root
   $want = [string[]]@($srv.Keys | Where-Object { (Test-InScope $_ $scope) -and -not ($mine.ContainsKey($_) -and $mine[$_] -eq $srv[$_]) })
-  if (-not $want.Count) { Write-Output 'nothing new on the server'; return }
+  if (-not $want.Count) { Write-Output 'up to date: nothing new on the server'; return }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
     $r = Invoke-Remote $c 'files-get' -InBytes ($Utf8.GetBytes(($want -join "`n") + "`n")) -OutFile "$t/down.tar"; if ($r.Code) { Fail 'pull failed' }
     Expand-Safe "$t/down.tar" "$t/d"
-    $n = 0; $kept = $false
+    $n = 0
     foreach ($f in (Get-SyncFiles "$t/d")) {
       if (-not (Test-SafeDest $root $f)) { [Console]::Error.WriteLine("bridge: ${f}: a folder on its path is a link here; not written"); continue }
-      $dst = Join-Path $root $f; if (Test-Path -LiteralPath $dst) { $kept = $true }
+      $dst = Join-Path $root $f; if (Test-Path -LiteralPath $dst) { Write-Output "replaced $f (your old copy is in $(Join-Path $Dir 'files-trash'))" }
       Save-Old $root $f; New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
       Copy-Item -LiteralPath (Join-Path "$t/d" $f) -Destination $dst -Force; $n++
     }
-    Write-Output "pulled $n files into $root"; if ($kept) { Write-Output "your old copies of the replaced files are in $(Join-Path $Dir 'files-trash')" }
+    Write-Output "got $(Get-Count $n) from the server, in $root"
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
@@ -334,7 +340,7 @@ switch ($cmd) {
   }
   'files' {
     $c = Read-Config; $sub = if ($rest.Count) { $rest[0] } else { '' }; $a1 = if ($rest.Count -gt 1) { $rest[1] } else { '' }
-    if ($sub -eq '') { Get-SyncFiles $c.BRIDGE_CONTEXT; break }
+    if ($sub -eq '') { [Console]::Error.WriteLine('(context folder: what bridge sync would send. For the file store: bridge files push | pull | share)'); Get-SyncFiles $c.BRIDGE_CONTEXT; break }
     if ($sub -eq 'setup') {
       $f = if ($a1) { $a1 } else { Join-Path $HOME 'PierceFiles' }
       New-Item -ItemType Directory -Force -Path $f | Out-Null; $f = (Resolve-Path -LiteralPath $f).ProviderPath
@@ -353,7 +359,7 @@ switch ($cmd) {
       'share' {
         if (-not $a1) { Fail 'usage: bridge files share <path> [minutes, default 60]' }
         $m = if ($rest.Count -gt 2) { $rest[2] } else { '60' }
-        Push-Files $c $a1
+        Push-Files $c $a1 $true
         $r = Invoke-Remote $c "files-share $m" -InBytes ($Utf8.GetBytes("$script:Scope`n")); if ($r.Code) { Fail 'no link made' }
         Write-Output $r.Out.Trim()
       }

@@ -277,15 +277,16 @@ t "files setup checks the server and says where" sh -c 'echo "$1" | grep -q "fil
 t "files setup writes BRIDGE_FILES" L 'grep -qx BRIDGE_FILES=/root/PierceFiles ~/pierce-bridge/config'
 L "mkdir -p $LF/docs $LF/.ssh && echo hello > $LF/docs/a.md && head -c 5000000 /dev/urandom > $LF/big.bin && echo s > $LF/.env && echo s > $LF/.ssh/id_x && echo s > $LF/api-token.txt && echo s > $LF/srv.pem"
 o=$(L 'bridge files push' 2>&1)
-t "push stores the new files" sh -c 'echo "$1" | grep -q "stored 2 files"' _ "$o"
+t "push stores the new files" sh -c 'echo "$1" | grep -q "sent 2 files"' _ "$o"
+t "push says which files stay home (secrets)" sh -c 'echo "$1" | grep -q "kept on this computer.*: \.env" && echo "$1" | grep -q "kept on this computer.*api-token.txt"' _ "$o"
 t "push: laptop -> server" V "grep -qx hello $FS/docs/a.md"
 t "push: a 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(L "sha256sum $LF/big.bin" | cut -c1-64)" ]'
 t "push never sends .env, .ssh, tokens or keys" V "test ! -e $FS/.env && test ! -e $FS/.ssh && test ! -e $FS/api-token.txt && test ! -e $FS/srv.pem"
-t "push again: nothing to push" sh -c 'echo "$1" | grep -q "nothing to push"' _ "$(L 'bridge files push' 2>&1)"
+t "push again: nothing to push" sh -c 'echo "$1" | grep -q "up to date: the server"' _ "$(L 'bridge files push' 2>&1)"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"
-t "pull fetches only what changed" sh -c 'echo "$1" | grep -q "pulled 1 files"' _ "$o"
+t "pull fetches only what changed" sh -c 'echo "$1" | grep -q "got 1 file from the server"' _ "$o"
 L "echo local-edit > $LF/docs/a.md"; V "echo server-edit > $FS/docs/a.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull takes the server copy" L "grep -qx server-edit $LF/docs/a.md"
@@ -409,10 +410,11 @@ W 'mkdir -p /root/WinFiles/sub && echo win-file > /root/WinFiles/sub/w.md && ech
 o=$(W "$P files push" 2>&1)
 t "ps1 push: windows -> server" V "grep -qx win-file $FS/sub/w.md"
 t "ps1 push never sends .env" V "test ! -e $FS/.env"
+t "ps1 push says .env stays home" sh -c 'echo "$1" | grep -q "kept on this computer.*: \.env"' _ "$o"
 o=$(W "$P files pull" 2>&1)
 t "ps1 pull: server -> windows" W 'grep -qx from-claude /root/WinFiles/out/r.md && grep -qx laptop-v3 /root/WinFiles/docs/a.md'
 t "ps1 pull: the 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(W "sha256sum /root/WinFiles/big.bin" | cut -c1-64)" ]'
-t "ps1 push again: nothing to push" sh -c 'echo "$1" | grep -q "nothing to push"' _ "$(W "$P files push" 2>&1)"
+t "ps1 push again: nothing to push" sh -c 'echo "$1" | grep -q "up to date: the server"' _ "$(W "$P files push" 2>&1)"
 V "echo server-new > $FS/sub/w.md"; W 'echo win-edit > /root/WinFiles/sub/w.md'
 W "$P files pull sub" >/dev/null 2>&1
 t "ps1 pull keeps the replaced copy in files-trash" W 'grep -qx server-new /root/WinFiles/sub/w.md && cat /root/pierce-bridge/files-trash/*/sub/w.md | grep -qx win-edit'
