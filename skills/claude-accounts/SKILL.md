@@ -10,9 +10,8 @@ own config dir (`~/.claude` = main, `~/.claude-<name>` for the rest) with its ow
 settings and memory are shared by symlink.
 
 **Each account must be its own legitimately owned/paid account; check Anthropic's terms for your plan.**
-Accounts are for keeping separate purposes apart (personal / work / a client who pays for their own seat),
-not for stretching usage limits. There is no automatic switching when an account hits a limit, and this skill
-never adds one.
+Accounts are for keeping separate purposes apart (personal / work / a client who pays for their own seat).
+An account is chosen when a session starts; nothing moves a running session or job to another account.
 
 | Need | Command |
 |---|---|
@@ -21,6 +20,9 @@ never adds one.
 | A project tab on a specific account | `claude-tab <dir> -n <Project> -a <name>` |
 | A headless job on a specific account | `claude-acct run <name> -p "..."` |
 | Add an account | `claude-acct add <name>`, then `/login` in the Claude that opens |
+| Menu sorted least-used first (route mod) | `claude-pick` (Enter = least used) |
+| Start on the least-used account | `claude-pick auto [claude args]` |
+| Account folders, least-used first (scripts) | `claude-pick order` |
 
 ## Rules
 - **Pick by purpose, not by headroom.** A job runs on the account whose work it is: client-a's repo on the
@@ -28,14 +30,16 @@ never adds one.
   (e.g. "client-a/* → account `client-a`") so cron jobs and tabs follow it.
 - **New cron/scripted jobs name their account explicitly** (`claude-acct run <name> -p`), never a bare
   `claude` that silently lands on whatever account the shell happens to point at.
-- **Usage numbers come only from Claude Code's own `rate_limits`** (saved by the kit statusline). Never read
-  login tokens or call undocumented endpoints to get them. "no data yet" just means that account hasn't
-  drawn a status line since the statusline mod was installed.
+- **Least-used only among accounts that fit the work.** `claude-pick auto` is for work any of your accounts
+  may do; work that belongs to one account still names it.
+- **Usage numbers come only from Claude Code's own `rate_limits`** (saved per account by the kit status
+  line). "no data yet" / `?` just means that account hasn't drawn a status line yet; it sorts last.
 - **An account near its limit:** tell the human and wait, or move to work that doesn't need it. Don't
-  re-route that account's work onto another account.
+  move that account's work onto another account.
 - Subagents run on the parent session's account. Work that belongs to another account is a separate
   session on that account, not a subagent.
 - If two accounts show the same login email, the second `/login` never happened: open that account and sign in.
-- Never print token or credential values; compare logins by email only.
+- Never print login secrets; compare logins by email only.
 
-Needs: this kit (`claude-acct`, `claude-tab`), the statusline mod for usage numbers, `jq`.
+Needs: this kit (`claude-acct`, `claude-tab`), the statusline mod for usage numbers, the route mod for
+`claude-pick` (`sh mods/route/install.sh`), `jq`. Windows: run these on the server over SSH (`ssh box claude-pick`).

@@ -3,6 +3,23 @@
 Newest first. **Run this** lines are for people who already installed the kit.
 Watch this repo → Custom → Releases to get notified.
 
+## Unreleased: file store, route and usage mods
+**Run this** if you already use the bridge: `bridge setup me@my-server` once more (updates the server side, keeps
+your settings), then `bridge files setup`.
+
+### Added
+- **File store** in the bridge mod: `bridge files push` / `pull` for files up to 100 MB each, both ways over the same
+  SSH link (Mac, Linux, Windows). Only changed files travel; a replaced copy goes to a `files-trash` folder, never
+  lost; same deny-list as sync. `bridge files push ~/Desktop/q3.pdf` copies a file in and sends it.
+  `bridge files share q3.pdf 30` makes a 30-minute link, off until the server owner sets `LK_FILES_SHARE=1`.
+- **route** mod: `claude-pick` starts Claude on your least-used account (menu, `auto`, `order`), using status-line
+  usage only. Try: `claude-pick auto -p "hello"`.
+- **usage** mod: `sh mods/usage/install.sh` sets up the usage status line: `▶ main  5h ▰▰▱▱▱ 40%   week ▰▰▰▰▰ 91%`
+  and `  work  5h ∞   week ▰▱▱▱▱ 10%`, one line per account, plus a server-busy line.
+
+### Fixed
+- `bridge.ps1 share <path>` / `pull <path>` read only the first letter of a lone argument.
+
 ## v0.5.0 (2026-11-03): strict rules, each backed by a tool
 **Run this** if you already installed: `lead update`. Then turn on the two hooks:
 `mods/install.sh hook lead-cap` and `mods/install.sh hook send-guard '<your send tools>'` (see

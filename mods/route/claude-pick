@@ -1,0 +1,42 @@
+#!/bin/sh
+# claude-pick - start Claude on the least-used of your accounts, using the usage each account's status line saved.
+#   claude-pick                menu, least-used first (Enter = least used)
+#   claude-pick auto [args]    no menu: start Claude on the least-used account (args go to claude, e.g. -p "...")
+#   claude-pick order          print account config folders, least-used first (for scripts)
+#   claude-pick add <name>     same as claude-acct add
+#   claude-pick <name> [args]  same as claude-acct run
+# Least used = lowest weekly %, then lowest 5-hour %. An account with no saved numbers yet goes last; a window that
+# has already reset counts as 0%. Numbers are only what Claude Code passed to the kit status line (rate_limits),
+# saved per account in ~/.cache/pierce-skill-kit/usage-<name>.json. No login is read and no API is called.
+CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit
+names() { echo main; for d in "$HOME"/.claude-*/; do [ -d "$d" ] && basename "$d" | sed 's/^\.claude-//'; done; }
+dir_of() { [ "$1" = main ] && echo "$HOME/.claude" || echo "$HOME/.claude-$1"; }
+ranked() { # "name week 5h" per account, least used first (999 = no data); stable, so main wins ties
+  for n in $(names); do
+    f=$CACHE/usage-$n.json
+    if [ -s "$f" ]; then jq -r --arg n "$n" --argjson now "$(date +%s)" '
+      def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null;
+      def pct(w): if w == null or w.used_percentage == null then null
+        elif (ts(w.resets_at) // ($now + 1)) < $now then 0 else (w.used_percentage | round) end;
+      "\($n) \(pct(.seven_day) // 999) \(pct(.five_hour) // (if .seven_day then 0 else 999 end))"' "$f" 2>/dev/null || echo "$n 999 999"
+    else echo "$n 999 999"; fi
+  done | sort -s -k2,2n -k3,3n; }
+show() { [ "$1" = 999 ] && echo "?" || echo "$1%"; }
+command -v jq >/dev/null || { echo "claude-pick needs jq" >&2; exit 1; }
+ACCT=$(command -v claude-acct) || { echo "claude-pick needs claude-acct (the kit's core install)" >&2; exit 1; }
+
+case $1 in
+  order) ranked | while read -r n _ _; do dir_of "$n"; done;;
+  auto) shift; n=$(ranked | head -1 | cut -d' ' -f1); echo "claude-pick: $n" >&2; exec "$ACCT" run "$n" "$@";;
+  add) shift; exec "$ACCT" add "$@";;
+  -h|--help) sed -n 2,9p "$0";;
+  "") i=0; ranked > "${TMPDIR:-/tmp}/claude-pick.$$"
+    while read -r n w h; do i=$((i + 1))
+      printf '  %d) %-10s week %-4s 5h %-4s%s\n' "$i" "$n" "$(show "$w")" "$(show "$h")" "$([ "$i" = 1 ] && echo '  <- least used')"
+    done < "${TMPDIR:-/tmp}/claude-pick.$$"
+    printf 'Account number (Enter = least used): '; read -r k; case $k in *[!0-9]*) k=0;; esac
+    n=$(sed -n "${k:-1}p" "${TMPDIR:-/tmp}/claude-pick.$$" | cut -d' ' -f1); rm -f "${TMPDIR:-/tmp}/claude-pick.$$"
+    [ -n "$n" ] || { echo "no such number" >&2; exit 2; }
+    exec "$ACCT" run "$n";;
+  *) exec "$ACCT" run "$@";;
+esac

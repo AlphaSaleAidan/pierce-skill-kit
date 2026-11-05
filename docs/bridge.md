@@ -55,6 +55,7 @@ On the laptop:
 | `bridge share <path> < file` | writes one file into the context folder, then syncs |
 | `bridge pull [path]` | syncs, then lists the folder (or prints one file) |
 | `bridge files` | lists what sync would send, after the deny-list and size caps |
+| `bridge files setup\|push\|pull\|share` | the file store for big files (below) |
 
 On the server (the lead runs these): `bridge reply "<text>"` (queues an answer for every laptop's inbox) and
 `bridge log [N]` (the last N bridge actions).
@@ -84,6 +85,32 @@ time and sends the merged folder back. Changed on one side: that side wins. Dele
 the other: deleted on both. **Changed on both sides: both are kept**: the server's version keeps the name, yours
 becomes `name.conflict-<laptop-name>-<UTC time>`, and the conflict is printed and logged. One path (tar) on every
 OS, so the deny-list is enforced in one place per side; rsync isn't used.
+
+## File store (big files, both ways)
+The context folder is for small notes (1 MB a file). For real files (PDFs, videos, exports up to **100 MB each**)
+use the file store: a folder on your computer (default `~/PierceFiles`) and one on the server
+(`~/.pierce-skill-kit/files`), over the same SSH link. Nothing else to install or pay for.
+
+```sh
+bridge files setup                 # once (Windows: bridge files setup, after the bridge.ps1 shortcut)
+bridge files push                  # send what's new or changed in ~/PierceFiles to the server
+bridge files push ~/Desktop/q3.pdf # a file from anywhere: copied into ~/PierceFiles, then sent
+bridge files pull                  # get what Claude made on the server
+bridge files share q3.pdf 30       # a link anyone can open for 30 minutes (off unless the server owner turns it on)
+```
+
+- Only new or changed files travel (checked by hash), up to 1 GB per push or pull.
+- Nothing is ever lost: when a push or pull replaces a file, the old copy goes to `~/pierce-bridge/files-trash/`
+  (laptop) or `~/.pierce-skill-kit/bridge/files-trash/` (server). Empty those yourself now and then.
+- Same deny-list as sync: `.env`, keys, `.ssh`, anything named secret/token/credential never moves.
+- Server off or laptop asleep? Push and pull just say "can't reach the server" and change nothing. Run them again
+  later. There is no background sync: you push and pull when you want.
+- On the server, tell Claude: "put the result in ~/.pierce-skill-kit/files".
+- **Sharing is off by default.** The server owner turns it on with `LK_FILES_SHARE=1` in
+  `~/.config/pierce-skill-kit/config`, and needs `cloudflared` and `python3` on the server. Each link has a random
+  part, serves that one file only, and stops after the minutes you give (default 60, max 1440).
+- Your server needs the new bridge once: `bridge setup me@my-server` again (keeps your settings). An old server
+  answers with "the server has an older bridge" and the exact command.
 
 ## What never syncs
 Matched against every part of the path, case-insensitive, on **both** sides (the laptop never sends them, the
@@ -115,7 +142,7 @@ Everything the bridge writes is owner-only (`umask 077`) on Mac/Linux and the se
   ```
   command="~/.local/bin/bridge-serve",restrict ssh-ed25519 AAAA... pierce-bridge-my-laptop
   ```
-  With that key, the server runs `bridge-serve` whatever is asked: only `send`, `fetch`, `sync` and `ping` are
+  With that key, the server runs `bridge-serve` whatever is asked: only `send`, `fetch`, `sync`, `ping` and the `files-*` actions are
   allowed (names and counts checked, the deny-list re-applied); a shell, any other command, `;`/`&&` tricks and
   port forwarding are refused and logged. Your normal key keeps working for your own logins. If the laptop is
   lost, delete that one line on the server.
@@ -142,7 +169,9 @@ directions plus hand-made archives sent straight to the server (gzip/xz/bzip2, o
 links, `../`), linked folders on both sides, a bare-shell lead window, escape codes in replies, file modes,
 both size caps, the forced command refusing
 shells and other commands, the MCP server's handshake, `tools/list` and `tools/call`, and `bridge.ps1`
-setup/send/inbox/sync/harden.
+setup/send/inbox/sync/harden, and the file store from both clients: setup, push, pull, a 5 MB file byte for byte,
+replaced copies kept, push of an outside file and of one folder, the deny-list, the 100 MB cap, `files-get` refusing
+paths outside the store, sharing off by default then on (a stand-in `cloudflared`), and a clear message when offline.
 
 **Not tested yet:** `bridge.ps1` receiving a hostile archive (its checks mirror the tested sh ones), a real Windows PC (Windows PowerShell 5.1, `tar.exe`, CRLF checkouts, non-ASCII file names),
 macOS (BSD `tar`, `shasum`), and the MCP server inside a real Claude Code session.

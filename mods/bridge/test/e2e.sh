@@ -27,7 +27,7 @@ $D run -d --init --name "$N-vps" --network "$N" --network-alias vps -v "$KIT:/ki
 $D run -d --init --name "$N-local" --network "$N" -v "$KIT:/kit:ro" node:22-slim sleep infinity >/dev/null
 $D run -d --init --name "$N-win" --network "$N" -v "$KIT:/kit:ro" mcr.microsoft.com/powershell:latest sleep infinity >/dev/null
 echo "== installing packages (containers only)"
-$D exec "$N-vps" sh -c 'apt-get update -qq && apt-get install -y -qq openssh-server tmux procps >/dev/null' >/dev/null 2>&1 &
+$D exec "$N-vps" sh -c 'apt-get update -qq && apt-get install -y -qq openssh-server tmux procps python3-minimal >/dev/null' >/dev/null 2>&1 &
 $D exec "$N-local" sh -c 'apt-get update -qq && apt-get install -y -qq openssh-client xz-utils bzip2 >/dev/null' >/dev/null 2>&1 &
 $D exec "$N-win" sh -c 'apt-get update -qq && apt-get install -y -qq openssh-client >/dev/null' >/dev/null 2>&1 &
 wait
@@ -269,6 +269,65 @@ o=$(L "$K </dev/null 2>&1"); rc=$?
 t "refusals are logged on the vps" V 'grep -q "REFUSED not a bridge action: bash" ~/.pierce-skill-kit/bridge.log'
 t "every action is logged on the vps" V 'grep -q "	send laptop" ~/.pierce-skill-kit/bridge.log && grep -q "	sync laptop" ~/.pierce-skill-kit/bridge.log && grep -q "	fetch " ~/.pierce-skill-kit/bridge.log'
 
+echo "== file store (through the forced-command key)"
+FS=/home/tester/.pierce-skill-kit/files; LF=/root/PierceFiles
+$D exec "$N-vps" sh -c 'printf "#!/bin/sh\necho \"\$@\" > /tmp/cf.args\necho \"INF |  https://test-share-abc.trycloudflare.com  |\" >&2\nexec sleep 600\n" > /usr/local/bin/cloudflared && chmod 755 /usr/local/bin/cloudflared'
+o=$(L 'bridge files setup' 2>&1)
+t "files setup checks the server and says where" sh -c 'echo "$1" | grep -q "file store ready: /root/PierceFiles"' _ "$o"
+t "files setup writes BRIDGE_FILES" L 'grep -qx BRIDGE_FILES=/root/PierceFiles ~/pierce-bridge/config'
+L "mkdir -p $LF/docs $LF/.ssh && echo hello > $LF/docs/a.md && head -c 5000000 /dev/urandom > $LF/big.bin && echo s > $LF/.env && echo s > $LF/.ssh/id_x && echo s > $LF/api-token.txt && echo s > $LF/srv.pem"
+o=$(L 'bridge files push' 2>&1)
+t "push stores the new files" sh -c 'echo "$1" | grep -q "stored 2 files"' _ "$o"
+t "push: laptop -> server" V "grep -qx hello $FS/docs/a.md"
+t "push: a 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(L "sha256sum $LF/big.bin" | cut -c1-64)" ]'
+t "push never sends .env, .ssh, tokens or keys" V "test ! -e $FS/.env && test ! -e $FS/.ssh && test ! -e $FS/api-token.txt && test ! -e $FS/srv.pem"
+t "push again: nothing to push" sh -c 'echo "$1" | grep -q "nothing to push"' _ "$(L 'bridge files push' 2>&1)"
+V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
+o=$(L 'bridge files pull' 2>&1)
+t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"
+t "pull fetches only what changed" sh -c 'echo "$1" | grep -q "pulled 1 files"' _ "$o"
+L "echo local-edit > $LF/docs/a.md"; V "echo server-edit > $FS/docs/a.md"
+o=$(L 'bridge files pull' 2>&1)
+t "pull takes the server copy" L "grep -qx server-edit $LF/docs/a.md"
+t "pull keeps the replaced local copy in files-trash" L 'cat ~/pierce-bridge/files-trash/*/docs/a.md | grep -qx local-edit'
+t "pull says where the old copy went" sh -c 'echo "$1" | grep -q files-trash' _ "$o"
+L "echo laptop-v3 > $LF/docs/a.md && bridge files push" >/dev/null 2>&1
+t "push replaces the server copy" V "grep -qx laptop-v3 $FS/docs/a.md"
+t "push keeps the replaced server copy in files-trash" V 'cat ~/.pierce-skill-kit/bridge/files-trash/*/docs/a.md | grep -qx server-edit'
+L 'echo from-desktop > /tmp/outside.txt && bridge files push /tmp/outside.txt' >/dev/null 2>&1
+t "push <file elsewhere> copies it in and sends it" V "grep -qx from-desktop $FS/outside.txt"
+L "echo b > $LF/docs/b.md && echo c > $LF/c.md && bridge files push docs" >/dev/null 2>&1
+t "push <folder> sends only that folder" V "test -f $FS/docs/b.md && test ! -e $FS/c.md"
+L "head -c 105000000 /dev/zero > $LF/huge.bin"
+o=$(L 'bridge files push' 2>&1)
+t "a file over 100 MB stays home, with a message" sh -c 'echo "$1" | grep -q "huge.bin.*100 MB cap"' _ "$o"
+t "the over-cap file is not on the server" V "test ! -e $FS/huge.bin"
+L "rm -f $LF/huge.bin"
+o=$(L "printf '../bridge/messages.tsv\n../../.ssh/authorized_keys\n/etc/passwd\n' | $K files-get | tar -tf - 2>&1")
+t "files-get sends nothing outside the store" sh -c '[ -z "$1" ]' _ "$o"
+o=$(L "$K 'files-put ../x' </dev/null 2>&1"); rc=$?
+t "files-put refuses a bad name" sh -c '[ "$1" = 3 ]' _ "$rc"
+o=$(L 'bridge files share docs/a.md' 2>&1); rc=$?
+t "share is off by default and says how to turn it on" sh -c '[ "$1" != 0 ] && echo "$2" | grep -q "LK_FILES_SHARE=1"' _ "$rc" "$o"
+V 'echo LK_FILES_SHARE=1 >> ~/.config/pierce-skill-kit/config'
+o=$(L 'bridge files share docs/a.md 5' 2>&1)
+url=$(echo "$o" | grep -o 'https://test-share-abc.trycloudflare.com/[0-9a-f]\{32\}/a.md')
+t "share prints a random link to the one file" sh -c '[ -n "$1" ]' _ "$url"
+t "share says how long it works" sh -c 'echo "$1" | grep -q "works for 5 minutes"' _ "$o"
+path=${url#https://test-share-abc.trycloudflare.com}
+fetch() { V "port=\$(grep -o '127.0.0.1:[0-9]*' /tmp/cf.args); python3 -c 'import sys,urllib.request; print(urllib.request.urlopen(\"http://\"+sys.argv[1]+sys.argv[2]).read().decode())' \$port '$1'"; }
+t "the shared link serves the file" sh -c 'echo "$1" | grep -qx laptop-v3' _ "$(fetch "$path" 2>&1)"
+t "the share root lists nothing" sh -c '[ -z "$(echo "$1" | tr -d "[:space:]")" ]' _ "$(fetch / 2>&1)"
+t "the share is time-limited (timeout 5m)" V 'pgrep -af "timeout 5m python3 -m http.server" >/dev/null'
+o=$(L "$K 'files-share 99999' </dev/null 2>&1"); rc=$?
+t "share refuses more than a day" sh -c '[ "$1" = 3 ]' _ "$rc"
+L "cp ~/pierce-bridge/config /tmp/bdbad2/config.f; printf 'BRIDGE_VPS=tester@nohost-x\nBRIDGE_NAME=laptop\nBRIDGE_FILES=$LF\n' > /tmp/bdbad2/config"
+o=$(L 'BRIDGE_DIR=/tmp/bdbad2 timeout 60 bridge files push' 2>&1)
+t "server offline: push says so in plain words and changes nothing" sh -c 'echo "$1" | grep -q "can.t reach tester@nohost-x"' _ "$o"
+o=$(L 'BRIDGE_DIR=/tmp/bdbad2 timeout 60 bridge files pull' 2>&1)
+t "server offline: pull says so too" sh -c 'echo "$1" | grep -q "can.t reach"' _ "$o"
+V 'pkill -f "timeout 5m" ; true'
+
 echo "== bridge.ps1 (PowerShell 7 on Linux)"
 t "bridge.ps1 parses" W 'pwsh -NoProfile -c "\$e=\$null;\$t=\$null;[void][System.Management.Automation.Language.Parser]::ParseFile(\"/kit/mods/bridge/bridge.ps1\",[ref]\$t,[ref]\$e); if(\$e){\$e; exit 1}"'
 P='pwsh -NoProfile -File /root/pierce-bridge/bin/bridge.ps1'
@@ -343,5 +402,27 @@ for c in 'send hi' 'inbox' 'sync'; do
   done
 done
 
+echo "== bridge.ps1: file store"
+o=$(W "$P files setup /root/WinFiles" 2>&1)
+t "ps1 files setup" sh -c 'echo "$1" | grep -q "file store ready: /root/WinFiles"' _ "$o"
+W 'mkdir -p /root/WinFiles/sub && echo win-file > /root/WinFiles/sub/w.md && echo s > /root/WinFiles/.env'
+o=$(W "$P files push" 2>&1)
+t "ps1 push: windows -> server" V "grep -qx win-file $FS/sub/w.md"
+t "ps1 push never sends .env" V "test ! -e $FS/.env"
+o=$(W "$P files pull" 2>&1)
+t "ps1 pull: server -> windows" W 'grep -qx from-claude /root/WinFiles/out/r.md && grep -qx laptop-v3 /root/WinFiles/docs/a.md'
+t "ps1 pull: the 5 MB file arrives byte for byte" sh -c '[ "$(V "sha256sum $FS/big.bin" | cut -c1-64)" = "$(W "sha256sum /root/WinFiles/big.bin" | cut -c1-64)" ]'
+t "ps1 push again: nothing to push" sh -c 'echo "$1" | grep -q "nothing to push"' _ "$(W "$P files push" 2>&1)"
+V "echo server-new > $FS/sub/w.md"; W 'echo win-edit > /root/WinFiles/sub/w.md'
+W "$P files pull sub" >/dev/null 2>&1
+t "ps1 pull keeps the replaced copy in files-trash" W 'grep -qx server-new /root/WinFiles/sub/w.md && cat /root/pierce-bridge/files-trash/*/sub/w.md | grep -qx win-edit'
+W 'echo from-win-desktop > /tmp/wout.txt'
+W "$P files push /tmp/wout.txt" >/dev/null 2>&1
+t "ps1 push <file elsewhere> copies it in and sends it" V "grep -qx from-win-desktop $FS/wout.txt"
+o=$(W "$P files share sub/w.md 5" 2>&1)
+t "ps1 share prints the link" sh -c 'echo "$1" | grep -q "https://test-share-abc.trycloudflare.com/[0-9a-f]\{32\}/w.md"' _ "$o"
+o=$(W 'printf "BRIDGE_VPS=tester@nohost-x\nBRIDGE_NAME=winbox\nBRIDGE_KEY=\nBRIDGE_FILES=/root/WinFiles\n" > /tmp/bdw4/config; BRIDGE_DIR=/tmp/bdw4 timeout 90 pwsh -NoProfile -File /kit/mods/bridge/bridge.ps1 files push' 2>&1)
+t "ps1 server offline: says so in plain words" sh -c 'echo "$1" | grep -q "can.t reach tester@nohost-x"' _ "$o"
+V 'pkill -f "timeout 5m" ; true'
 echo
 if [ $fails = 0 ]; then echo "ALL BRIDGE E2E TESTS PASSED"; else echo "$fails FAILED"; exit 1; fi

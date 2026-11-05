@@ -1,6 +1,6 @@
 #!/bin/sh
-# Statusline: folder + git branch/dirty count + model + Claude config in use, then 5-hour + weekly plan usage
-# (from Claude Code's own rate_limits input), hub counts (projects-hub mod)
+# Statusline: folder + git branch/dirty count + model + Claude config in use, then 5-hour + weekly plan usage per
+# account (from Claude Code's own rate_limits input; ∞ = no 5-hour limit), claude-usage MCP budgets, hub counts (projects-hub mod)
 # and a server-overload warning (agent-board's health check). Cached 30 s per folder+model so many tabs stay cheap.
 # Settings: "statusLine": { "type": "command", "command": "sh <this file>" }   Needs: jq. Optional: STATUSLINE_EXTRA
 # (a command whose output is appended to line 1, fed the same JSON on stdin).
@@ -24,17 +24,33 @@ cfg=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; cfg=${cfg%/}
 line1="$line1  \033[2m│\033[0m  \033[35m$model\033[0m  \033[2m│\033[0m  \033[36m${cfg##*/}\033[0m"
 extra=''; [ -n "$STATUSLINE_EXTRA" ] && extra=$(printf '%s' "$in" | sh -c "$STATUSLINE_EXTRA" 2>/dev/null)
 printf '%b   %s' "$line1" "$extra"
-# Plan usage: the 5-hour and weekly windows Claude Code itself passes in (rate_limits; appears after the first reply).
-usage=$(printf '%s' "$in" | jq -r --argjson now "$(date +%s)" '
+# Plan usage, one line per account: the 5-hour and weekly windows Claude Code passes in (rate_limits, saved above
+# per account each time a tab draws). Several accounts: ▶ marks this one. ∞ = no 5-hour limit (Claude Code sent a
+# weekly window but no 5-hour one, or the account is listed in LK_USAGE_NO_5H in the kit config).
+# shellcheck disable=SC1090  # config path is chosen at run time
+[ -f "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" ] && . "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}"
+usage=$(jq -rn --argjson now "$(date +%s)" --arg cur "$acct" --arg no5h " $LK_USAGE_NO_5H " '
   def bar(p): ([5, ((p // 0) / 20 | round)] | min) as $n | ("▰" * $n) + ("▱" * (5 - $n));
   def col(p): if p >= 85 then "\u001b[31m" elif p >= 60 then "\u001b[33m" else "\u001b[32m" end;
-  def left(r): (try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null) as $t
-    | if $t == null then "" else ([0, ($t - $now) / 60 | floor] | max) as $m
+  def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null;
+  def left(r): ts(r) as $t | if $t == null then "" else ([0, ($t - $now) / 60 | floor] | max) as $m
       | if $m >= 1440 then "\($m / 1440 | floor)d\($m % 1440 / 60 | floor)h" elif $m >= 60 then "\($m / 60 | floor)h" else "\($m)m" end end;
   def win(lbl; w): if w == null or w.used_percentage == null then empty else
-    "\(lbl) \(col(w.used_percentage))\(bar(w.used_percentage)) \(w.used_percentage | round)%\u001b[0m \u001b[2m↻\(left(w.resets_at))\u001b[0m" end;
-  [win("5h"; .rate_limits.five_hour), win("week"; .rate_limits.seven_day)] | join("   ")' 2>/dev/null)
+    (if (ts(w.resets_at) // $now + 1) < $now then 0 else w.used_percentage end) as $p   # window already reset: 0%
+    | "\(lbl) \(col($p))\(bar($p)) \($p | round)%\u001b[0m \u001b[2m↻\(left(w.resets_at))\u001b[0m" end;
+  [inputs | {n: (input_filename | sub(".*/usage-"; "") | sub("\\.json$"; "")), r: .} | .n as $n
+    | .w = [if ($no5h | contains(" \($n) ")) or (.r.five_hour == null and .r.seven_day != null) then "5h \u001b[1;32m∞\u001b[0m"
+            else win("5h"; .r.five_hour) end, win("week"; .r.seven_day)] | select(.w | length > 0)] as $a
+  | $a[] | (if ($a | length) > 1 then (if .n == $cur then "\u001b[1;36m▶ \(.n)\u001b[0m  " else "  \(.n)  " end) else "" end) + (.w | join("   "))
+  ' "${XDG_CACHE_HOME:-$HOME/.cache}"/pierce-skill-kit/usage-*.json 2>/dev/null)
 [ -n "$usage" ] && printf '\n%s' "$usage"
+# Per-project budgets from the claude-usage MCP (budget_start), measured against this account's weekly % now.
+# shortcut: ignores a weekly reset since the MCP last checked (the MCP banks it on its next budget_check).
+bf=${CLAUDE_USAGE_BUDGETS:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}/usage-budgets.json}
+wk=$(printf '%s' "$in" | jq '.rate_limits.seven_day.used_percentage // empty' 2>/dev/null)
+[ -s "$bf" ] && [ -n "$wk" ] && b=$(jq -r --argjson wk "$wk" '[.[] | ((.carried // 0) + $wk - (.baseline_pct // 0) | . * 10 | round / 10) as $u
+  | "\(if $u >= .limit_pct then "\u001b[31m" else "" end)\(.name) \($u)/\(.limit_pct)%\u001b[0m"] | select(length > 0) | "budget " + join(" · ")' "$bf" 2>/dev/null) \
+  && [ -n "$b" ] && printf '\n%s' "$b"
 # Hub counts, if the projects-hub mod is installed next to this one; refreshed in the background every 5 min.
 hub=${HUB_CACHE:-$HOME/.cache/projects-hub.json}; gather=$here/../projects-hub/bin/gather.py
 if [ -f "$gather" ]; then
@@ -42,7 +58,7 @@ if [ -f "$gather" ]; then
   [ "$age" -gt 300 ] && setsid nohup python3 "$gather" >/dev/null 2>&1 < /dev/null &
   [ -s "$hub" ] && printf '\n%s' "$(jq -r '"\([.sessions[]|select(.live)]|length) open sessions · \(.prs|length) PRs · \(.projects|length) active · \(.services|length) ports"' "$hub")"
 fi
-health=$here/../agent-board/bin/health.sh
+health=$here/../agent-board/bin/health.sh; [ -f "$health" ] || health=$here/health.sh   # usage mod copies one here
 h=$( [ -f "$health" ] && sh "$health" 2>/dev/null )
 case "$h" in
   crit*) printf '\n\033[1;41;97m SERVER OVERLOADED \033[0m \033[31m%s\033[0m' "${h#crit }";;

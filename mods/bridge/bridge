@@ -7,6 +7,10 @@
 #   bridge share <path> < file    write one file into the context folder, then sync
 #   bridge pull [path]            sync, then list the context folder (or print one file)
 #   bridge files                  list what sync would send, after the deny-list and size caps
+#   bridge files setup [folder]   your file store folder (default ~/PierceFiles); files there can be big (100 MB each)
+#   bridge files push [path]      send new/changed files to the server (a path: only that; a file elsewhere: copied in)
+#   bridge files pull [path]      get new/changed files from the server (a replaced copy is kept in ~/pierce-bridge/files-trash)
+#   bridge files share <path> [minutes]   push, then a time-limited public link (only if the server owner turned sharing on)
 # On the server:  bridge reply "<text>"  (answer the local session)   bridge log  (recent bridge actions)
 # The same file, installed on the server as ~/.local/bin/bridge-serve, is the SSH entry point / forced command.
 # shellcheck disable=SC2088  # "~/..." is expanded by the server, not here
@@ -17,6 +21,8 @@ MAX_FILE=1048576      # 1 MB per file
 MAX_TOTAL=52428800    # 50 MB per sync
 MAX_MSG=8192
 MAX_ENTRIES=5000     # per archive
+FILES_MAX_FILE=104857600     # file store: 100 MB per file
+FILES_MAX_TOTAL=1073741824   # file store: 1 GB per push or pull
 DIR=${BRIDGE_DIR:-$HOME/pierce-bridge}
 
 die() { echo "bridge: $*" >&2; exit 1; }
@@ -38,7 +44,7 @@ list_files() { # list_files <dir>: files that may sync (relative paths); skipped
   ( cd "$1" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do
       denied "$f" && continue
       s=$(wc -c < "$f" | tr -d ' ')
-      [ "$s" -le $MAX_FILE ] || { echo "bridge: not synced: $f ($s bytes, over the 1 MB cap)" >&2; continue; }
+      [ "$s" -le $MAX_FILE ] || { echo "bridge: not synced: $f ($s bytes, over the $((MAX_FILE / 1048576)) MB cap)" >&2; continue; }
       printf '%s\n' "$f"
     done )
 }
@@ -46,7 +52,7 @@ list_files() { # list_files <dir>: files that may sync (relative paths); skipped
 pack() { # pack <dir> <list> <out.tar>: tar the listed files, refusing anything over the 50 MB total cap
   total=0
   while IFS= read -r f; do total=$((total + $(wc -c < "$1/$f"))); done < "$2"
-  [ "$total" -le $MAX_TOTAL ] || { echo "bridge: refusing to sync: $total bytes is over the 50 MB total cap" >&2; return 1; }
+  [ "$total" -le $MAX_TOTAL ] || { echo "bridge: refusing to sync: $total bytes is over the $((MAX_TOTAL / 1048576)) MB total cap" >&2; return 1; }
   COPYFILE_DISABLE=1 tar -cf "$3" -C "$1" -T "$2"
 }
 
@@ -58,7 +64,7 @@ unpack() { # unpack <tar> <dir>: plain uncompressed tar of files and folders, ca
   if tar -tf "$1" | grep -qE '^/|(^|/)\.\.(/|$)|\\|:'; then echo "bridge: refusing archive: unsafe paths" >&2; return 1; fi
   # sizes from the listing: GNU tar puts user/group in field 2 and the size in 3; bsdtar has links, user, group, size in 5
   why=$(awk -v mf=$MAX_FILE -v mt=$MAX_TOTAL -v me=$MAX_ENTRIES '{ s = ($2 ~ /\//) ? $3 : $5; n++; t += s; if (s + 0 > mf) big = 1 }
-    END { if (n > me) print "over " me " entries"; else if (big) print "a file over the 1 MB cap"; else if (t > mt) print "over the 50 MB total cap" }' "$1.v")
+    END { if (n > me) print "over " me " entries"; else if (big) print "a file over the " mf / 1048576 " MB cap"; else if (t > mt) print "over the " mt / 1048576 " MB total cap" }' "$1.v")
   [ -z "$why" ] || { echo "bridge: refusing archive: $why" >&2; return 1; }
   mkdir -p "$2" && tar -xf "$1" -C "$2" && chmod -R u+rwX "$2"
 }
@@ -74,6 +80,10 @@ cleanup() { chmod -R u+rwX "$1" 2>/dev/null; rm -rf "$1"; }
 clean() { LC_ALL=C tr -d '\000-\010\013-\037\177' | LC_ALL=C sed "s/$(printf '\302')[$(printf '\200')-$(printf '\237')]//g"; }
 
 hash() { [ -f "$1" ] || return 0; { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1; }
+manifest() { list_files "$1" | while IFS= read -r f; do printf '%s\t%s\n' "$f" "$(hash "$1/$f")"; done; }   # path<TAB>sha256
+bigcaps() { MAX_FILE=$FILES_MAX_FILE; MAX_TOTAL=$FILES_MAX_TOTAL; }
+keep() { # keep <root> <rel> <trash>: move the copy about to be replaced into <trash>/<time>/<rel>, so nothing is lost
+  [ -f "$1/$2" ] || return 0; k=$3/$(date -u +%Y%m%dT%H%M%SZ)/$2; mkdir -p "$(dirname "$k")" && mv "$1/$2" "$k"; }
 
 # ---------- server side (invoked as bridge-serve) ----------
 server_env() {
@@ -141,6 +151,51 @@ serve_sync() { # stdin: tar of the client's folder. stdout: tar of the merged sh
   pack "$SHARED" "$t/out" "$t/out.tar" && cat "$t/out.tar"
 }
 
+# ---------- the file store (server side): $LK_HOME/files, big caps, only changed files travel ----------
+files_env() { FILES=${LK_FILES:-$LK_HOME/files}; mkdir -p "$FILES"; bigcaps; }
+serve_files_ls() { files_env; manifest "$FILES" 2>/dev/null; }
+
+serve_files_put() { # stdin: tar of new/changed files. A copy it replaces goes to $STATE/files-trash.
+  files_env; t=$(mktemp -d); trap 'cleanup "$t"' EXIT
+  head -c $((MAX_TOTAL + 10485760)) > "$t/in.tar"
+  unpack "$t/in.tar" "$t/in" || exit 1
+  exec 8>"$STATE/files.lock"; flock -w 60 8 || refuse "file store busy"
+  list_files "$t/in" > "$t/l"; n=0
+  while IFS= read -r f; do
+    safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link on the server; not stored" >&2; continue; }
+    [ "$(hash "$FILES/$f")" = "$(hash "$t/in/$f")" ] && continue
+    keep "$FILES" "$f" "$STATE/files-trash" && mkdir -p "$(dirname "$FILES/$f")" && cp "$t/in/$f" "$FILES/$f" && n=$((n + 1))
+  done < "$t/l"
+  slog "files-put $1: $n files"; echo "stored $n files on the server ($FILES)"
+}
+
+serve_files_get() { # stdin: wanted paths, one per line. Only files the store would list are sent (no links, no deny-list).
+  files_env; t=$(mktemp -d); trap 'cleanup "$t"' EXIT
+  list_files "$FILES" > "$t/have" 2>/dev/null
+  head -c 1048576 | LC_ALL=C sort -u | while IFS= read -r f; do grep -qxF -- "$f" "$t/have" && printf '%s\n' "$f"; done > "$t/l"
+  pack "$FILES" "$t/l" "$t/out.tar" && cat "$t/out.tar"
+}
+
+serve_files_share() { # stdin: one stored path. A random link to that one file for $1 minutes, via a cloudflared quick tunnel.
+  files_env
+  [ "${LK_FILES_SHARE:-0}" = 1 ] || refuse "sharing is off on this server. The server owner turns it on with LK_FILES_SHARE=1 in ~/.config/pierce-skill-kit/config"
+  for c in cloudflared python3 timeout; do command -v $c >/dev/null || refuse "sharing needs $c on the server"; done
+  f=$(head -c 4096 | head -n 1)
+  list_files "$FILES" 2>/dev/null | grep -qxF -- "$f" || refuse "not in the file store: $f (push it first)"
+  d=$(mktemp -d "$STATE/share.XXXXXX"); tok=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')
+  name=$(basename "$f" | tr -c 'A-Za-z0-9._\n-' _); mkdir -p "$d/www/$tok"
+  : > "$d/www/index.html"; : > "$d/www/$tok/index.html"   # no folder listings: the link only works with the exact name
+  cp "$FILES/$f" "$d/www/$tok/$name"; chmod -R go-rwx "$d"
+  port=$(awk 'BEGIN { srand(); print 20000 + int(rand() * 40000) }')
+  setsid nohup timeout "$1m" python3 -m http.server -b 127.0.0.1 -d "$d/www" "$port" > /dev/null 2>&1 < /dev/null &
+  setsid nohup timeout "$1m" cloudflared tunnel --no-autoupdate --url "http://127.0.0.1:$port" > "$d/tunnel.log" 2>&1 < /dev/null &
+  setsid nohup sh -c "sleep $(($1 * 60 + 10)); rm -rf '$d'" > /dev/null 2>&1 < /dev/null &
+  i=0; url=
+  while [ $i -lt 30 ] && [ -z "$url" ]; do sleep 1; i=$((i + 1)); url=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$d/tunnel.log" | head -n 1); done
+  [ -n "$url" ] || { slog "files-share: no tunnel"; echo "bridge: the tunnel did not start; see $d/tunnel.log" >&2; exit 1; }
+  slog "files-share $f for $1 min"; echo "$url/$tok/$name"; echo "works for $1 minutes, for anyone who has the link" >&2
+}
+
 serve_add_key() { # stdin: one forced-command authorized_keys line (only reachable from a normal shell login)
   l=$(head -c 4096 | head -n 1)
   case $l in 'command="~/.local/bin/bridge-serve",restrict ssh-'*) ;; *) refuse "not a bridge key line";; esac
@@ -162,20 +217,22 @@ serve() {
   case $act in
     send|sync) valid_name "$arg" || refuse "bad name: $arg";;
     fetch) case $arg in ''|*[!0-9]*) refuse "bad count: $arg";; esac;;
-    ping) [ -z "$arg" ] || refuse "ping takes no argument";;
+    ping|files-ls|files-get) [ -z "$arg" ] || refuse "$act takes no argument";;
+    files-put) valid_name "$arg" || refuse "bad name: $arg";;
+    files-share) case $arg in ''|*[!0-9]*) refuse "bad minutes: $arg";; esac; [ "$arg" -ge 1 ] && [ "$arg" -le 1440 ] || refuse "minutes must be 1 to 1440";;
     add-key) [ $remote = 0 ] || refuse "add-key needs a normal login";;
     *) refuse "not a bridge action: $act";;
   esac
   slog "$act $arg"
-  case $act in add-key) serve_add_key;; *) "serve_$act" "$arg";; esac
+  case $act in add-key) serve_add_key;; *) "serve_$(printf '%s' "$act" | tr - _)" "$arg";; esac
 }
 
 # ---------- local side ----------
 load_config() {
   [ -f "$DIR/config" ] || die "not set up yet: run  bridge setup me@my-server"
-  BRIDGE_VPS=; BRIDGE_NAME=; BRIDGE_KEY=; BRIDGE_CONTEXT=$DIR/context
+  BRIDGE_VPS=; BRIDGE_NAME=; BRIDGE_KEY=; BRIDGE_CONTEXT=$DIR/context; BRIDGE_FILES=$HOME/PierceFiles
   while IFS='=' read -r k v; do
-    case $k in BRIDGE_VPS) BRIDGE_VPS=$v;; BRIDGE_NAME) BRIDGE_NAME=$v;; BRIDGE_KEY) BRIDGE_KEY=$v;; BRIDGE_CONTEXT) BRIDGE_CONTEXT=$v;; esac
+    case $k in BRIDGE_VPS) BRIDGE_VPS=$v;; BRIDGE_NAME) BRIDGE_NAME=$v;; BRIDGE_KEY) BRIDGE_KEY=$v;; BRIDGE_CONTEXT) BRIDGE_CONTEXT=$v;; BRIDGE_FILES) BRIDGE_FILES=$v;; esac
   done < "$DIR/config"
   [ -n "$BRIDGE_VPS" ] && [ -n "$BRIDGE_NAME" ] || die "config $DIR/config is missing BRIDGE_VPS or BRIDGE_NAME"
   mkdir -p "$BRIDGE_CONTEXT"
@@ -202,6 +259,51 @@ do_sync() {
     mkdir -p "$(dirname "$BRIDGE_CONTEXT/$f")" && cp "$t/d/$f" "$BRIDGE_CONTEXT/$f"
   done < "$t/down"
   echo "synced $(wc -l < "$t/down" | tr -d ' ') files: $BRIDGE_CONTEXT <-> $BRIDGE_VPS"
+  cleanup "$t"
+}
+
+# ---------- the file store (your side): BRIDGE_FILES (default ~/PierceFiles) ----------
+files_cfg() { load_config; FILES=$BRIDGE_FILES; mkdir -p "$FILES" || die "can't make $FILES"; bigcaps; }
+offline() { # the ssh call failed: say why in plain words
+  case $(cat "$1" 2>/dev/null) in *"not a bridge action"*) die "the server has an older bridge. Update it once:  bridge setup $BRIDGE_VPS --name $BRIDGE_NAME";;
+    *refused:*) die "the server said no (above)";; esac
+  die "can't reach $BRIDGE_VPS (offline, asleep or no network). Nothing changed; your files are still in $FILES. Try again later."; }
+scoped() { [ -z "$scope" ] || case $1 in "$scope"|"$scope"/*) ;; *) return 1;; esac; }
+files_scope() { # files_scope [path]: set $scope (relative to the store); a file from elsewhere is copied into the store first
+  scope=; [ -n "${1:-}" ] || return 0
+  if [ -f "$1" ] && a=$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) false;; esac; then
+    b=$(basename "$1"); ! denied "$b" || die "refused: $b is on the deny-list (secrets, keys, .env)"
+    [ "$(wc -c < "$1")" -le $MAX_FILE ] || die "$b is over the 100 MB cap"
+    keep "$FILES" "$b" "$DIR/files-trash"; cp "$1" "$FILES/$b" && echo "copied $b into $FILES"; scope=$b; return 0
+  fi
+  [ -e "$1" ] && a=$(cd "$(dirname "$1")" && pwd -P)/$(basename "$1") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) scope=${a#"$r"/}; return 0;; esac
+  scope=${1%/}; case $scope in /*|*..*|*\\*) die "refused path: $1";; esac
+}
+files_push() {
+  files_scope "${1:-}"; t=$(mktemp -d)
+  remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
+  manifest "$FILES" > "$t/mine"
+  while IFS="$(printf '\t')" read -r f h; do scoped "$f" && ! grep -qxF -- "$f	$h" "$t/srv" && printf '%s\n' "$f"; done < "$t/mine" > "$t/up"
+  [ -s "$t/up" ] || { echo "nothing to push: the server already has ${scope:-everything in $FILES}"; cleanup "$t"; return 0; }
+  pack "$FILES" "$t/up" "$t/up.tar" || { cleanup "$t"; exit 1; }
+  remote files-put "$BRIDGE_NAME" < "$t/up.tar" || { cleanup "$t"; die "push failed"; }
+  cleanup "$t"
+}
+files_pull() {
+  files_scope "${1:-}"; t=$(mktemp -d)
+  remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
+  manifest "$FILES" > "$t/mine" 2>/dev/null
+  while IFS="$(printf '\t')" read -r f h; do scoped "$f" && ! grep -qxF -- "$f	$h" "$t/mine" && printf '%s\n' "$f"; done < "$t/srv" > "$t/want"
+  [ -s "$t/want" ] || { echo "nothing new on the server"; cleanup "$t"; return 0; }
+  remote files-get < "$t/want" > "$t/down.tar" || { cleanup "$t"; die "pull failed"; }
+  unpack "$t/down.tar" "$t/d" || { cleanup "$t"; exit 1; }
+  list_files "$t/d" > "$t/got"; n=0; kept=0
+  while IFS= read -r f; do
+    safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link here; not written" >&2; continue; }
+    [ -f "$FILES/$f" ] && kept=1
+    keep "$FILES" "$f" "$DIR/files-trash" && mkdir -p "$(dirname "$FILES/$f")" && cp "$t/d/$f" "$FILES/$f" && n=$((n + 1))
+  done < "$t/got"
+  echo "pulled $n files into $FILES"; [ $kept = 0 ] || echo "your old copies of the replaced files are in $DIR/files-trash"
   cleanup "$t"
 }
 
@@ -240,7 +342,9 @@ setup() {
     else key=; echo "skipped: the bridge will use your normal login (full shell access)"; fi
   fi
   [ -n "$key" ] || echo "note: without --harden the bridge uses your normal SSH login, which has full shell access on $vps"
-  printf 'BRIDGE_VPS=%s\nBRIDGE_NAME=%s\nBRIDGE_KEY=%s\nBRIDGE_CONTEXT=%s\n' "$vps" "$name" "$key" "$DIR/context" > "$DIR/config"
+  keepf=$(grep '^BRIDGE_FILES=' "$DIR/config" 2>/dev/null)   # a re-run keeps the file store folder
+  printf 'BRIDGE_VPS=%s\nBRIDGE_NAME=%s\nBRIDGE_KEY=%s\nBRIDGE_CONTEXT=%s\n%s' "$vps" "$name" "$key" "$DIR/context" "${keepf:+$keepf
+}" > "$DIR/config"
   echo "4/4 registering the MCP server with Claude Code"
   cmd="claude mcp add -s user bridge -- node $DIR/bin/mcp.mjs"
   case "${CLAUDE_CONFIG_DIR:-$HOME/.claude}" in "$HOME"/*) cfg_ok=1;; *) cfg_ok=0;; esac
@@ -275,12 +379,27 @@ main() {
     pull) load_config; do_sync >&2 || exit 1
       if [ -n "${1:-}" ]; then safe_rel "$1" && [ -f "$BRIDGE_CONTEXT/$1" ] || die "no such file: $1"; cat "$BRIDGE_CONTEXT/$1"
       else list_files "$BRIDGE_CONTEXT"; fi;;
-    files) load_config; list_files "$BRIDGE_CONTEXT";;
+    files) sub=${1:-}; [ $# -gt 0 ] && shift
+      case $sub in
+        '') load_config; list_files "$BRIDGE_CONTEXT";;
+        setup) load_config; f=${1:-$HOME/PierceFiles}; mkdir -p "$f" && f=$(cd "$f" && pwd -P) || die "can't use $f"
+          grep -v '^BRIDGE_FILES=' "$DIR/config" > "$DIR/config.new"; printf 'BRIDGE_FILES=%s\n' "$f" >> "$DIR/config.new"; mv "$DIR/config.new" "$DIR/config"
+          BRIDGE_FILES=$f; FILES=$f; t=$(mktemp)
+          remote files-ls < /dev/null > /dev/null 2> "$t" || { cat "$t" >&2; offline "$t"; }; rm -f "$t"
+          echo "file store ready: $f <-> $BRIDGE_VPS:~/.pierce-skill-kit/files"
+          echo "put files in $f, then: bridge files push    (and bridge files pull to get the server's)";;
+        push) files_cfg; files_push "$@";;
+        pull) files_cfg; files_pull "$@";;
+        share) files_cfg; [ -n "${1:-}" ] || die "usage: bridge files share <path> [minutes, default 60]"
+          files_push "$1"; m=${2:-60}; t=$(mktemp)
+          printf '%s\n' "$scope" | remote files-share "$m" 2> "$t" || { cat "$t" >&2; rm -f "$t"; die "no link made"; }; cat "$t" >&2; rm -f "$t";;
+        *) die "usage: bridge files [setup [folder] | push [path] | pull [path] | share <path> [minutes]]";;
+      esac;;
     reply) server_env; [ $# -gt 0 ] || die "usage: bridge reply \"<text>\""
       printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$(printf '%s' "$*" | tr '\r\n\t' '   ')" >> "$STATE/outbox.tsv"
       slog "reply"; echo "queued for the local session (it shows up in: bridge inbox)";;
     log) server_env; tail -n "${1:-20}" "$LK_HOME/bridge.log" 2>/dev/null;;
-    *) sed -n 2,11p "$0"; exit 2;;
+    *) sed -n 2,15p "$0"; exit 2;;
   esac
 }
 main "$@"

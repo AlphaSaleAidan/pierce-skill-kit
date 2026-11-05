@@ -7,9 +7,14 @@
 #   bridge share <path>           write one file (content on stdin) into the context folder, then sync
 #   bridge pull [path]            sync, then list the context folder (or print one file)
 #   bridge files                  list what sync would send, after the deny-list and size caps
+#   bridge files setup [folder]   your file store folder (default ~\PierceFiles); files there can be big (100 MB each)
+#   bridge files push [path]      send new/changed files to the server (a path: only that; a file elsewhere: copied in)
+#   bridge files pull [path]      get new/changed files from the server (a replaced copy is kept in pierce-bridge\files-trash)
+#   bridge files share <path> [minutes]   push, then a time-limited public link (only if the server owner turned sharing on)
 $ErrorActionPreference = 'Stop'
 try { [Console]::InputEncoding = [Text.UTF8Encoding]::new($false); [Console]::OutputEncoding = [Text.UTF8Encoding]::new($false) } catch { }
 $MaxFile = 1048576; $MaxTotal = 52428800; $MaxEntries = 5000
+$FilesMaxFile = 104857600; $FilesMaxTotal = 1073741824   # file store: 100 MB per file, 1 GB per push or pull
 $Dir = if ($env:BRIDGE_DIR) { $env:BRIDGE_DIR } else { Join-Path $HOME 'pierce-bridge' }
 $Utf8 = New-Object Text.UTF8Encoding $false
 # Same deny-list as the sh side; matched against every part of the path, lower-cased.
@@ -34,7 +39,7 @@ function Get-SyncFiles([string]$root) {   # relative paths ('/' separated) that 
     if ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
     $rel = $f.FullName.Substring($full.Length + 1).Replace('\', '/')
     if (Test-Denied $rel) { continue }
-    if ($f.Length -gt $MaxFile) { [Console]::Error.WriteLine("bridge: not synced: $rel ($($f.Length) bytes, over the 1 MB cap)"); continue }
+    if ($f.Length -gt $MaxFile) { [Console]::Error.WriteLine("bridge: not synced: $rel ($($f.Length) bytes, over the $($MaxFile / 1MB) MB cap)"); continue }
     $out.Add($rel)
   }
   $sorted = [string[]]@($out | Sort-Object -CaseSensitive)
@@ -43,7 +48,7 @@ function Get-SyncFiles([string]$root) {   # relative paths ('/' separated) that 
 
 function New-Pack([string]$root, $files, [string]$tarPath) {
   $total = 0; foreach ($f in $files) { $total += (Get-Item -LiteralPath (Join-Path $root $f) -Force).Length }
-  if ($total -gt $MaxTotal) { Fail "refusing to sync: $total bytes is over the 50 MB total cap" }
+  if ($total -gt $MaxTotal) { Fail "refusing to sync: $total bytes is over the $($MaxTotal / 1MB) MB total cap" }
   $list = "$tarPath.list"; [IO.File]::WriteAllLines($list, [string[]]@($files), $Utf8)
   & tar -cf $tarPath -C $root -T $list; if ($LASTEXITCODE) { Fail 'tar failed' }
 }
@@ -58,10 +63,10 @@ function Expand-Safe([string]$tarPath, [string]$dest) {  # plain uncompressed ta
   foreach ($l in $v) {
     if ($l[0] -ne '-' -and $l[0] -ne 'd') { Fail 'refusing archive: it holds links or special files' }
     $p = $l -split '\s+'; $size = [long]$(if ($p[1].Contains('/')) { $p[2] } else { $p[4] })   # GNU tar vs bsdtar listing
-    if ($size -gt $MaxFile) { Fail 'refusing archive: a file over the 1 MB cap' }
+    if ($size -gt $MaxFile) { Fail "refusing archive: a file over the $($MaxFile / 1MB) MB cap" }
     $total += $size
   }
-  if ($total -gt $MaxTotal) { Fail 'refusing archive: over the 50 MB total cap' }
+  if ($total -gt $MaxTotal) { Fail "refusing archive: over the $($MaxTotal / 1MB) MB total cap" }
   foreach ($n in @(& tar -tf $tarPath)) { if ($n -match '^/|[\\:]|(^|/)\.\.(/|$)') { Fail 'refusing archive: unsafe paths' } }
   New-Item -ItemType Directory -Force -Path $dest | Out-Null
   & tar -xf $tarPath -C $dest; if ($LASTEXITCODE) { Fail 'could not unpack' }
@@ -82,7 +87,7 @@ function Test-SafeDest([string]$root, [string]$rel) {  # no folder on the way is
 function Get-Clean([string]$s) { return ($s -replace '[\x00-\x08\x0b-\x1f\x7f-\x9f]', '') }
 
 function Read-Config {
-  $c = @{ BRIDGE_CONTEXT = (Join-Path $Dir 'context'); BRIDGE_KEY = '' }
+  $c = @{ BRIDGE_CONTEXT = (Join-Path $Dir 'context'); BRIDGE_KEY = ''; BRIDGE_FILES = (Join-Path $HOME 'PierceFiles') }
   $p = Join-Path $Dir 'config'
   if (-not (Test-Path $p)) { Fail 'not set up yet: run  .\bridge.ps1 setup me@my-server' }
   foreach ($l in [IO.File]::ReadAllLines($p)) { $i = $l.IndexOf('='); if ($i -gt 0) { $c[$l.Substring(0, $i)] = $l.Substring($i + 1) } }
@@ -112,7 +117,7 @@ function Invoke-Ssh([string]$hostSpec, [string]$remoteCmd, [string]$key, [string
   $p.WaitForExit(); $outTask.Wait()
   if ($fs) { $fs.Close() }
   $err = $errTask.Result; if ($err) { [Console]::Error.Write($err) }
-  return [pscustomobject]@{ Code = $p.ExitCode; Out = $(if ($OutFile) { '' } else { $outTask.Result }) }
+  return [pscustomobject]@{ Code = $p.ExitCode; Err = $err; Out = $(if ($OutFile) { '' } else { $outTask.Result }) }
 }
 
 function Invoke-Remote($c, [string]$cmd, [string]$InFile, [byte[]]$InBytes, [string]$OutFile) {
@@ -141,6 +146,81 @@ function Sync-Context($c) {
       Copy-Item -LiteralPath (Join-Path "$t/d" $f) -Destination $dst -Force
     }
     Write-Output "synced $(@($down).Count) files: $ctx <-> $($c.BRIDGE_VPS)"
+  } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# ---------- the file store: BRIDGE_FILES (default ~\PierceFiles) <-> ~/.pierce-skill-kit/files on the server ----------
+function Set-BigCaps { $script:MaxFile = $FilesMaxFile; $script:MaxTotal = $FilesMaxTotal }
+function Get-Hash([string]$p) { return (Get-FileHash -LiteralPath $p -Algorithm SHA256).Hash.ToLowerInvariant() }
+function Get-Manifest([string]$root) {   # path -> sha256 (case-sensitive keys, like the server)
+  $h = New-Object 'Collections.Generic.Dictionary[string,string]'
+  foreach ($f in (Get-SyncFiles $root)) { $h[$f] = Get-Hash (Join-Path $root $f) }
+  return $h
+}
+function Save-Old([string]$root, [string]$rel) {  # move the copy about to be replaced into files-trash\<time>\<rel>
+  $src = Join-Path $root $rel; if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { return }
+  $k = Join-Path (Join-Path (Join-Path $Dir 'files-trash') (Get-Date).ToUniversalTime().ToString('yyyyMMddTHHmmssZ')) $rel
+  New-Item -ItemType Directory -Force -Path (Split-Path $k) | Out-Null; Move-Item -LiteralPath $src -Destination $k -Force
+}
+function Stop-Remote($c, $r) {   # an ssh call failed: say why in plain words
+  if ($r.Err -match 'not a bridge action') { Fail "the server has an older bridge. Update it once:  .\bridge.ps1 setup $($c.BRIDGE_VPS) -Name $($c.BRIDGE_NAME)" }
+  if ($r.Err -match 'refused:') { Fail 'the server said no (above)' }
+  Fail "can't reach $($c.BRIDGE_VPS) (offline, asleep or no network). Nothing changed; your files are still in $($c.BRIDGE_FILES). Try again later."
+}
+function Get-ServerFiles($c) {
+  $r = Invoke-Remote $c 'files-ls' -InBytes ([byte[]]@()); if ($r.Code) { Stop-Remote $c $r }
+  $h = New-Object 'Collections.Generic.Dictionary[string,string]'
+  foreach ($l in ($r.Out -split "`n")) { $i = $l.IndexOf("`t"); if ($i -gt 0) { $h[$l.Substring(0, $i)] = $l.Substring($i + 1).Trim() } }
+  return $h
+}
+function Test-InScope([string]$f, [string]$scope) { return (-not $scope -or $f -eq $scope -or $f.StartsWith("$scope/")) }
+function Get-Scope($c, [string]$p) {  # a path inside the store -> relative; a file elsewhere is copied in first
+  if (-not $p) { return '' }
+  $root = [IO.Path]::GetFullPath($c.BRIDGE_FILES).TrimEnd('\', '/')
+  if (Test-Path -LiteralPath $p) {
+    $full = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\', '/')
+    if ($full.StartsWith($root + [IO.Path]::DirectorySeparatorChar)) { return $full.Substring($root.Length + 1).Replace('\', '/') }
+    if (Test-Path -LiteralPath $full -PathType Leaf) {
+      $b = Split-Path $full -Leaf
+      if (Test-Denied $b) { Fail "refused: $b is on the deny-list (secrets, keys, .env)" }
+      if ((Get-Item -LiteralPath $full -Force).Length -gt $MaxFile) { Fail "$b is over the 100 MB cap" }
+      Save-Old $root $b; Copy-Item -LiteralPath $full -Destination (Join-Path $root $b) -Force
+      [Console]::Out.WriteLine("copied $b into $root"); return $b
+    }
+  }
+  $s = $p.Replace('\', '/').TrimEnd('/')
+  if ($s.StartsWith('/') -or $s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }
+  return $s
+}
+function Push-Files($c, [string]$p) {
+  $script:Scope = Get-Scope $c $p; $root = $c.BRIDGE_FILES
+  $srv = Get-ServerFiles $c; $mine = Get-Manifest $root
+  $up = [string[]]@($mine.Keys | Where-Object { (Test-InScope $_ $script:Scope) -and -not ($srv.ContainsKey($_) -and $srv[$_] -eq $mine[$_]) } | Sort-Object -CaseSensitive)
+  if (-not $up.Count) { Write-Output "nothing to push: the server already has $(if ($script:Scope) { $script:Scope } else { "everything in $root" })"; return }
+  $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
+  try {
+    New-Pack $root $up "$t/up.tar"
+    $r = Invoke-Remote $c "files-put $($c.BRIDGE_NAME)" -InFile "$t/up.tar"; if ($r.Code) { Fail 'push failed' }
+    Write-Output $r.Out.Trim()
+  } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
+}
+function Pull-Files($c, [string]$p) {
+  $scope = Get-Scope $c $p; $root = $c.BRIDGE_FILES
+  $srv = Get-ServerFiles $c; $mine = Get-Manifest $root
+  $want = [string[]]@($srv.Keys | Where-Object { (Test-InScope $_ $scope) -and -not ($mine.ContainsKey($_) -and $mine[$_] -eq $srv[$_]) })
+  if (-not $want.Count) { Write-Output 'nothing new on the server'; return }
+  $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
+  try {
+    $r = Invoke-Remote $c 'files-get' -InBytes ($Utf8.GetBytes(($want -join "`n") + "`n")) -OutFile "$t/down.tar"; if ($r.Code) { Fail 'pull failed' }
+    Expand-Safe "$t/down.tar" "$t/d"
+    $n = 0; $kept = $false
+    foreach ($f in (Get-SyncFiles "$t/d")) {
+      if (-not (Test-SafeDest $root $f)) { [Console]::Error.WriteLine("bridge: ${f}: a folder on its path is a link here; not written"); continue }
+      $dst = Join-Path $root $f; if (Test-Path -LiteralPath $dst) { $kept = $true }
+      Save-Old $root $f; New-Item -ItemType Directory -Force -Path (Split-Path $dst) | Out-Null
+      Copy-Item -LiteralPath (Join-Path "$t/d" $f) -Destination $dst -Force; $n++
+    }
+    Write-Output "pulled $n files into $root"; if ($kept) { Write-Output "your old copies of the replaced files are in $(Join-Path $Dir 'files-trash')" }
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
@@ -186,7 +266,9 @@ function Invoke-Setup([string]$vps, [string]$name, [bool]$harden) {
     } else { $key = ''; Write-Output 'skipped: the bridge will use your normal login (full shell access)' }
   }
   if (-not $key) { Write-Output "note: without -Harden the bridge uses your normal SSH login, which has full shell access on $vps" }
-  [IO.File]::WriteAllLines((Join-Path $Dir 'config'), [string[]]@("BRIDGE_VPS=$vps", "BRIDGE_NAME=$name", "BRIDGE_KEY=$key", "BRIDGE_CONTEXT=$(Join-Path $Dir 'context')"), $Utf8)
+  $cfgPath = Join-Path $Dir 'config'   # a re-run keeps the file store folder
+  $keepF = if (Test-Path $cfgPath) { @([IO.File]::ReadAllLines($cfgPath) | Where-Object { $_.StartsWith('BRIDGE_FILES=') }) } else { @() }
+  [IO.File]::WriteAllLines($cfgPath, [string[]](@("BRIDGE_VPS=$vps", "BRIDGE_NAME=$name", "BRIDGE_KEY=$key", "BRIDGE_CONTEXT=$(Join-Path $Dir 'context')") + $keepF), $Utf8)
   Write-Output '4/4 registering the MCP server with Claude Code'
   $mcp = Join-Path $bin 'mcp.mjs'
   $cmd = "claude mcp add -s user bridge -- node `"$mcp`""
@@ -199,7 +281,7 @@ function Invoke-Setup([string]$vps, [string]$name, [bool]$harden) {
 
 # ---------- main ----------
 $cmd = if ($args.Count) { [string]$args[0] } else { '' }
-$rest = if ($args.Count -gt 1) { [string[]]$args[1..($args.Count - 1)] } else { [string[]]@() }
+$rest = [string[]]@($args | Select-Object -Skip 1)   # always an array: a lone argument must not become a string
 switch ($cmd) {
   'setup' {
     $vps = ''; $name = ''; $harden = $false
@@ -250,6 +332,32 @@ switch ($cmd) {
       [IO.File]::ReadAllText($f)
     } else { Get-SyncFiles $c.BRIDGE_CONTEXT }
   }
-  'files' { $c = Read-Config; Get-SyncFiles $c.BRIDGE_CONTEXT }
-  default { Get-Content $PSCommandPath -TotalCount 9 | Select-Object -Skip 2 | ForEach-Object { $_.TrimStart('# ') }; exit 2 }
+  'files' {
+    $c = Read-Config; $sub = if ($rest.Count) { $rest[0] } else { '' }; $a1 = if ($rest.Count -gt 1) { $rest[1] } else { '' }
+    if ($sub -eq '') { Get-SyncFiles $c.BRIDGE_CONTEXT; break }
+    if ($sub -eq 'setup') {
+      $f = if ($a1) { $a1 } else { Join-Path $HOME 'PierceFiles' }
+      New-Item -ItemType Directory -Force -Path $f | Out-Null; $f = (Resolve-Path -LiteralPath $f).ProviderPath
+      $cp = Join-Path $Dir 'config'
+      $lines = @([IO.File]::ReadAllLines($cp) | Where-Object { -not $_.StartsWith('BRIDGE_FILES=') }) + "BRIDGE_FILES=$f"
+      [IO.File]::WriteAllLines($cp, [string[]]$lines, $Utf8); $c.BRIDGE_FILES = $f
+      $r = Invoke-Remote $c 'files-ls' -InBytes ([byte[]]@()); if ($r.Code) { Stop-Remote $c $r }
+      Write-Output "file store ready: $f <-> $($c.BRIDGE_VPS):~/.pierce-skill-kit/files"
+      Write-Output "put files in $f, then: bridge files push    (and bridge files pull to get the server's)"; break
+    }
+    if ($sub -notin @('push', 'pull', 'share')) { Fail 'usage: bridge files [setup [folder] | push [path] | pull [path] | share <path> [minutes]]' }
+    New-Item -ItemType Directory -Force -Path $c.BRIDGE_FILES | Out-Null; Set-BigCaps
+    switch ($sub) {
+      'push' { Push-Files $c $a1 }
+      'pull' { Pull-Files $c $a1 }
+      'share' {
+        if (-not $a1) { Fail 'usage: bridge files share <path> [minutes, default 60]' }
+        $m = if ($rest.Count -gt 2) { $rest[2] } else { '60' }
+        Push-Files $c $a1
+        $r = Invoke-Remote $c "files-share $m" -InBytes ($Utf8.GetBytes("$script:Scope`n")); if ($r.Code) { Fail 'no link made' }
+        Write-Output $r.Out.Trim()
+      }
+    }
+  }
+  default { Get-Content $PSCommandPath -TotalCount 13 | Select-Object -Skip 2 | ForEach-Object { $_.TrimStart('# ') }; exit 2 }
 }
