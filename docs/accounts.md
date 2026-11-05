@@ -6,11 +6,18 @@ its own login and plan, and follow your plan's terms.** `claude-pick` just start
 left; it reads no login, calls no API, and never moves a running session to another account.
 
 ```sh
-claude-acct add work           # creates ~/.claude-work, shares your setup into it, opens Claude: type /login
-claude-acct                    # pick an account (shows each one's last 5-hour / weekly usage) and start Claude
-claude-acct list               # accounts + usage
-claude-acct run work           # start Claude on the work account ("main" = ~/.claude)
-claude-tab ~/code/client-a -n client-a -a work   # a project tab that runs on the work account
+# create ~/.claude-work, share your setup
+# into it, open Claude (type /login)
+claude-acct add work
+# pick an account (shows last 5-hour and
+# weekly usage) and start Claude
+claude-acct
+# accounts + usage
+claude-acct list
+# start Claude on work ("main" = ~/.claude)
+claude-acct run work
+# a project tab that runs on work
+claude-tab ~/code/client-a -n client-a -a work
 ```
 
 - **What's shared** (symlinked from `~/.claude`): skills, `CLAUDE.md`, agents, commands, settings, plugins and project
@@ -58,10 +65,12 @@ Account number (Enter = most room):
 (Trimmed to fit a phone: in a terminal each row also shows how old its numbers are, e.g. `(2h ago)`, and row 1
 ends with `<- most room`.)
 
-Before any account has numbers:
+Before any account has numbers (the first message is one line in a terminal; wrapped here to fit a phone):
 
 ```text
-No usage numbers yet: install the usage status line (sh mods/usage/install.sh) and open each account once.
+No usage numbers yet: install the usage status
+line (sh mods/usage/install.sh) and open each
+account once.
   1) main     week ?    5h ?
   2) work     week ?    5h ?
 Account number (Enter = 1):

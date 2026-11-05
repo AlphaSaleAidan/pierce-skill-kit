@@ -7,12 +7,14 @@ memory index, `ROPE.md`. Everything goes over SSH with a key. No open ports, no 
 **Moving big files (PDFs, videos, exports)?** Jump to the [file store](#file-store-big-files-both-ways).
 
 ```
-laptop                                            server (the kit, lead in tmux "hub:Lead")
-  bridge send "..."   ── ssh ──>  bridge-serve  ──> typed into the lead: [BRIDGE from my-laptop] ...
-  bridge inbox        <── ssh ──  outbox        <── the lead runs: bridge reply "..."
-  ~/pierce-bridge/context  <── ssh (tar) ──>  ~/.pierce-skill-kit/shared
-  ~/PierceFiles            <── ssh (push/pull) ──>  ~/.pierce-skill-kit/files
+laptop                    server
+bridge send  ── ssh ──>  typed into the lead
+bridge inbox <── ssh ──  bridge reply "..."
+context/     <── ssh ──> shared/
+PierceFiles/ <── ssh ──> files/
 ```
+On the laptop the folders are `~/pierce-bridge/context` and `~/PierceFiles`; on the server they're
+`~/.pierce-skill-kit/shared` and `~/.pierce-skill-kit/files`. The lead runs in tmux (`hub:Lead`).
 
 Files: [`mods/bridge/`](../mods/bridge/): `bridge` (Mac/Linux CLI, and on the server `bridge-serve`), `bridge.ps1`
 (Windows CLI), `mcp.mjs` (the MCP server for your local Claude Code), `test/e2e.sh`.
@@ -27,8 +29,9 @@ and open PowerShell in that folder).
 
 **Mac / Linux** (from a clone of this repo):
 ```sh
-sh mods/bridge/bridge setup me@my-server --name my-laptop
-export PATH="$HOME/pierce-bridge/bin:$PATH"     # add to ~/.zshrc or ~/.bashrc
+sh mods/bridge/bridge setup me@my-server
+# add this line to ~/.zshrc or ~/.bashrc:
+export PATH="$HOME/pierce-bridge/bin:$PATH"
 ```
 
 **Windows** (PowerShell 5.1 or 7, built-in OpenSSH; in the repo folder). Once per PC, let your own scripts run
@@ -39,9 +42,12 @@ Get-ChildItem -Recurse | Unblock-File
 ```
 Then:
 ```powershell
-powershell -ExecutionPolicy Bypass -File mods\bridge\bridge.ps1 setup me@my-server -Name my-laptop
-# then add the shortcut it prints to your profile (notepad $PROFILE):
-function bridge { & "$HOME\pierce-bridge\bin\bridge.ps1" @args }
+.\mods\bridge\bridge.ps1 setup me@my-server
+# then open your profile:  notepad $PROFILE
+# and add the shortcut it prints:
+function bridge {
+  & "$HOME\pierce-bridge\bin\bridge.ps1" @args
+}
 ```
 
 Setup checks the key login, copies `bridge-serve` (and `bridge`, for `bridge reply`) to `~/.local/bin` on the
@@ -115,7 +121,7 @@ bridge files push ~/Desktop/q3.pdf
 On Windows, type `bridge files push ` and drag the file from Explorer into the PowerShell window to paste its path
 (your Desktop may live under OneDrive, so typing it is easy to get wrong):
 ```
-bridge files push "C:\Users\you\OneDrive\Desktop\q3.pdf"
+bridge files push "C:\...\Desktop\q3.pdf"
 ```
 Get what Claude made on the server:
 ```
@@ -134,7 +140,7 @@ What it looks like:
 sent 2 files to the server
 > bridge files pull
   got clients/summary.md (26 bytes)
-got 1 file from the server, in C:\Users\jake\PierceFiles
+got 1 file from the server, in /home/jake/PierceFiles
 ```
 
 Good to know:
@@ -147,7 +153,10 @@ Good to know:
 - **Nothing is lost.** When a file is replaced, the old copy goes to `~/pierce-bridge/files-trash/` (your computer)
   or `~/.pierce-skill-kit/bridge/files-trash/` (server). Empty those yourself now and then.
 - **Secrets stay home.** Same deny-list as sync: `.env`, keys, `.ssh`, anything named secret, token or credential.
-  Push tells you once which files it kept back.
+  Push tells you once which files it kept back. Caught one by mistake (a Keynote `.key`, "Secret Santa.xlsx")?
+  Rename it, or zip it.
+- **Names Windows can't hold** (with `\ : * ? " < > |`, ending in a dot or space, or `CON`, `NUL`...) are skipped
+  with a note, on every computer, so the folder always works on Windows too.
 - **Server off or computer asleep?** Push and pull say "can't reach the server" and change nothing. Run them
   again later. There's no background sync: you push and pull when you want.
 - **The first time:** your server needs the new bridge. Run `bridge setup me@my-server` again (keeps your

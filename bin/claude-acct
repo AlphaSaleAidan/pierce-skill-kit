@@ -28,7 +28,7 @@ usage() { # usage <name>: "5h 23% · week 71% (2h ago)" from the statusline's sa
   f=$CACHE/usage-$1.json
   [ -s "$f" ] && command -v jq >/dev/null || { echo "no data yet"; return; }
   age=$(ago $(( $(date +%s) - $(mtime "$f") )))
-  jq -r --arg age "$age" '"5h \(.five_hour.used_percentage // "?" | if type=="number" then round else . end)% · week \(.seven_day.used_percentage // "?" | if type=="number" then round else . end)% (\($age))"' "$f"; }
+  jq -r --arg age "$age" '"5h \(.five_hour.used_percentage // "?" | if type=="number" then round else . end)% · week \(.seven_day.used_percentage // "?" | if type=="number" then round else . end)% (\($age))"' "$f" 2>/dev/null || echo "no numbers (unreadable usage file)"; }
 share() { # share <dir>: symlink everything shareable from ~/.claude into an account's dir
   mkdir -p "$MAIN/projects"   # conversations: shared, or a tab can't pick up one started on another account
   for e in "$MAIN"/* "$MAIN"/.[!.]*; do

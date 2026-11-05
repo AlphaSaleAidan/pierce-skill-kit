@@ -71,6 +71,9 @@ draw main "{\"five_hour\":{\"used_percentage\":5,\"resets_at\":$future},\"seven_
 check "reset window counts as 0%" [ "$(claude-pick order | head -1)" = "$HOME/.claude" ]
 echo 'not json' > "$XDG_CACHE_HOME/pierce-skill-kit/usage-work.json"
 check "broken usage file = no data, not a crash" [ "$(claude-pick order | tail -1)" = "$HOME/.claude-work" ]
+claude-acct list > "$T/acl" 2>&1; printf '\n' | claude-pick > "$T/pk" 2>&1 || true
+check "list: damaged usage file shows 'no numbers', no jq error" sh -c "grep -qE '^  work +no numbers \\(unreadable usage file\\)\$' '$T/acl' && ! grep -qi 'jq\\|parse' '$T/acl'"
+check "claude-pick: damaged usage file shows 'no numbers', no jq error, carries on" sh -c "grep -q '     no numbers (unreadable usage file)' '$T/pk' && ! grep -qi 'jq\\|parse' '$T/pk'"
 
 # a full account (>= 95% of its 5-hour or weekly window, not yet reset) is never picked and says why
 in2h=$(( $(date +%s) + 7260 )); in1h=$(( $(date +%s) + 3660 )); in1d=$(( $(date +%s) + 90060 ))

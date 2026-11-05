@@ -38,10 +38,10 @@ usage=$(for f in "${XDG_CACHE_HOME:-$HOME/.cache}"/pierce-skill-kit/usage-*.json
   def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null;
   def dur(s): ([0, s / 60 | floor] | max) as $m
       | if $m >= 1440 then "\($m / 1440 | floor)d\($m % 1440 / 60 | floor)h" elif $m >= 60 then "\($m / 60 | floor)h" else "\($m)m" end;
-  def left(r): ts(r) as $t | if $t == null then "" else dur($t - $now) end;
+  def left(r): ts(r) as $t | if $t == null or $t - $now < 60 then "" else " \u001b[2m↻\(dur($t - $now))\u001b[0m" end;   # no time, or already reset: no ↻
   def win(lbl; w; old): if w == null or w.used_percentage == null then empty else
     (if (ts(w.resets_at) // $now + 1) < $now then 0 else w.used_percentage end) as $p   # window already reset: 0%
-    | "\(lbl) \(col($p; old))\(bar($p)) \($p | round)%\u001b[0m \u001b[2m↻\(left(w.resets_at))\u001b[0m" end;
+    | "\(lbl) \(col($p; old))\(bar($p)) \($p | round)%\u001b[0m\(left(w.resets_at))" end;
   [inputs | .n as $n | (($now - .m) > 21600) as $old
     | .w = [if ($no5h | contains(" \($n) ")) then "5h \(if $old then "\u001b[2m" else "\u001b[1;32m" end)∞\u001b[0m"
             elif .r.five_hour == null and .r.seven_day != null then "5h \u001b[2m–\u001b[0m"

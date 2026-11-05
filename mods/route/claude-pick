@@ -32,7 +32,7 @@ ranked() {
         | {u: ($t // 0), why: "\(l) at \($p)%, \(if $t then "resets in \(dur($t - $now))" else "reset time unknown" end)"} else empty end;
       [full("week"; .seven_day), full("5h"; .five_hour)] as $b
       | "\($n) \(if ($b | length) > 0 then 1 else 0 end) \(pct(.seven_day) // 999) \(pct(.five_hour) // (if .seven_day then 0 else 999 end)) \($a) \(([$b[].u] | max) // 0) \($b[0].why // "")"' \
-      "$f" 2>/dev/null || echo "$n 0 999 999 - 0"
+      "$f" 2>/dev/null || echo "$n 0 999 999 - 0 bad"
     else echo "$n 0 999 999 - 0"; fi
   done | sort -s -k2,2n -k3,3n -k4,4n; }
 show() { [ "$1" = 999 ] && echo "?" || echo "$1%"; }
@@ -59,6 +59,7 @@ case $1 in
       mark=; [ "$i$win" = 11 ] && mark='  <- most room'
       printf '  %d) %-8s week %-4s 5h %-4s %-10s%s\n' "$i" "$n" "$(show "$w")" "$(show "$h")" "$(ago "$a")" "$mark"
       [ "$full" = 1 ] && printf '     full: %s\n' "$why"
+      [ "$why" = bad ] && printf '     no numbers (unreadable usage file)\n'
     done < "$t" | sed 's/ *$//'
     printf 'Account number (Enter = %s): ' "$([ $win = 1 ] && echo 'most room' || echo 1)"; read -r k
     case $k in '') k=1;; *[!0-9]*|??????*) k=0;; esac   # digits only, and short enough for test(1)

@@ -299,6 +299,20 @@ t "files go in batches (one per batch here) and all arrive" sh -c 'echo "$1" | g
 t "  ... all three on the server" V "test -f $FS/batch/f1 && test -f $FS/batch/f2 && test -f $FS/batch/f3"
 V "for i in 1 2 3; do echo s\$i > $FS/batch/f\$i; done"; o=$(L 'FILES_BATCH=1 bridge files pull batch' 2>&1)
 t "pull in batches: all three arrive" L "grep -qx s3 $LF/batch/f3 && grep -qx s1 $LF/batch/f1"
+L "echo two > $LF/f0 && echo q > '$LF/what?.txt' && echo c > '$LF/report 10:30.md'"; o=$(L 'bridge files push' 2>&1)
+t "a two-letter name like f0 is sent (deny-list regression)" V "grep -qx two $FS/f0"
+t "names Windows can't hold are skipped with the reason" sh -c 'echo "$1" | grep -q "skipped what?.txt: Windows can.t use that name" && echo "$1" | grep -q "skipped report 10:30.md"' _ "$o"
+t "  ... and the rest still went" sh -c 'echo "$1" | grep -q "sending f0"' _ "$o"
+L "rm -f '$LF/what?.txt' '$LF/report 10:30.md'"
+V "echo x > '$FS/bad:name.md' && echo y > $FS/good-after-bad.md"; o=$(L 'bridge files pull' 2>&1); rc=$?
+t "a server file named bad:name.md doesn't block pull" sh -c '[ "$1" = 0 ]' _ "$rc"
+t "  ... the good file arrives" L "grep -qx y $LF/good-after-bad.md"
+V "rm -f '$FS/bad:name.md'"
+L "mkdir -p /tmp/elsewhere && echo decoy > /tmp/elsewhere/good-after-bad.md"
+V "echo y2 > $FS/good-after-bad.md"; o=$(L 'cd /tmp/elsewhere && bridge files pull good-after-bad.md' 2>&1)
+t "pull <name> means the store's file even if the current folder has one" L "grep -qx y2 $LF/good-after-bad.md && grep -qx decoy /tmp/elsewhere/good-after-bad.md"
+o=$(L 'bridge files batch' 2>&1)
+t "bridge files <path> shows just that folder" sh -c 'echo "$1" | grep -q "same.*batch/f1" && ! echo "$1" | grep -q "f0"' _ "$o"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"

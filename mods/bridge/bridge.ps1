@@ -189,6 +189,10 @@ function Get-Count([int]$n) { if ($n -eq 1) { return '1 file' } return "$n files
 function Get-Size([long]$b) { if ($b -ge 1MB) { return '{0:N1} MB' -f ($b / 1MB) } if ($b -ge 1KB) { return "$([Math]::Floor($b / 1KB)) KB" } return "$b bytes" }
 function Get-Scope($c, [string]$mode, [string]$p) {  # a path inside the store -> relative; push: a file elsewhere is copied in first
   if (-not $p) { return '' }
+  if ($mode -ne 'push' -and -not [IO.Path]::IsPathRooted($p)) {   # pull/status: a relative path means a path in the store
+    $s = $p.Replace('\', '/').TrimEnd('/'); if ($s.StartsWith('./')) { $s = $s.Substring(2) }
+    if ($s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }; return $s
+  }
   $root = [IO.Path]::GetFullPath($c.BRIDGE_FILES).TrimEnd('\', '/')
   if (Test-Path -LiteralPath $p) {
     $full = (Resolve-Path -LiteralPath $p).ProviderPath.TrimEnd('\', '/')
@@ -428,6 +432,7 @@ switch ($cmd) {
     if ($sub -eq 'setup') {
       $f = if ($a1) { $a1 } else { Join-Path $HOME 'PierceFiles' }
       New-Item -ItemType Directory -Force -Path $f | Out-Null; $f = (Resolve-Path -LiteralPath $f).ProviderPath
+      if ($f -ne $c.BRIDGE_FILES) { foreach ($x in 'files-base.tsv', 'files-warned') { Remove-Item -LiteralPath (Join-Path $Dir $x) -Force -ErrorAction SilentlyContinue } }   # a new folder starts with no history
       $cp = Join-Path $Dir 'config'
       $lines = @([IO.File]::ReadAllLines($cp) | Where-Object { -not $_.StartsWith('BRIDGE_FILES=') }) + "BRIDGE_FILES=$f"
       [IO.File]::WriteAllLines($cp, [string[]]$lines, $Utf8); $c.BRIDGE_FILES = $f
@@ -435,7 +440,8 @@ switch ($cmd) {
       Write-Output "file store ready: $f <-> $($c.BRIDGE_VPS):~/.pierce-skill-kit/files"
       Write-Output "put files in $f, then: bridge files push    (and bridge files pull to get the server's)"; break
     }
-    if ($sub -notin @('push', 'pull', 'share')) { Fail 'usage: bridge files [setup [folder] | push [path] | pull [path] | share <path> [minutes]]' }
+    if ($sub.StartsWith('-')) { Fail 'usage: bridge files [path] | setup [folder] | push [path] | pull [path] | share <path> [minutes]' }
+    if ($sub -notin @('push', 'pull', 'share')) { New-Item -ItemType Directory -Force -Path $c.BRIDGE_FILES | Out-Null; Set-BigCaps; Show-Status $c $sub; break }   # bridge files <path>
     New-Item -ItemType Directory -Force -Path $c.BRIDGE_FILES | Out-Null; Set-BigCaps
     switch ($sub) {
       'push' { Push-Files $c $a1 }

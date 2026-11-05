@@ -27,12 +27,16 @@ out=$(draw "$(j "{\"five_hour\":{\"used_percentage\":40,\"resets_at\":$((now + 7
 echo "$out" | grep -q "5h ▰▰▱▱▱ 40% ↻2h   week ▰▰▰▰▰ 91% ↻1d1h" || { echo "$out"; fail "single-account bars"; }
 echo "$out" | grep -q "▶" && fail "single account should not be tagged"
 echo "ok: one account: 5h + weekly bars with reset times"
-echo "{\"seven_day\":{\"used_percentage\":10,\"resets_at\":$((now + 3600))}}" > "$cache/usage-work.json"
+echo "{\"seven_day\":{\"used_percentage\":10,\"resets_at\":$((now + 5400))}}" > "$cache/usage-work.json"   # 1h30: far from an hour boundary, so GNU and BSD runs agree
 echo "{\"five_hour\":{\"used_percentage\":99,\"resets_at\":$((now - 60))},\"seven_day\":{\"used_percentage\":50}}" > "$cache/usage-spare.json"
 out=$(draw "$(j "{\"five_hour\":{\"used_percentage\":40},\"seven_day\":{\"used_percentage\":91}}")")
 echo "$out" | grep -q "▶ main  5h ▰▰▱▱▱ 40%" || { echo "$out"; fail "current account line"; }
 echo "$out" | grep -q "  work  5h –   week ▰▱▱▱▱ 10%" || { echo "$out"; fail "no 5h window, not in LK_USAGE_NO_5H: 5h –"; }
 echo "$out" | grep -q "old:" && { echo "$out"; fail "fresh numbers marked old"; }
+# no reset time (main, spare week) or a reset that has passed (spare 5h): no ↻ at all, never a bare ↻ or ↻0m
+echo "$out" | grep -E "▶ main|  spare" | grep -q "↻" && { echo "$out"; fail "↻ shown with no usable reset time"; }
+echo "$out" | grep -qE "↻0m|↻ *$" && { echo "$out"; fail "bare ↻ or ↻0m"; }
+echo "$out" | grep -q "  work  .*week ▰▱▱▱▱ 10% ↻1h" || { echo "$out"; fail "work reset time"; }
 echo "$out" | grep -q "  spare  5h ▱▱▱▱▱ 0%" || { echo "$out"; fail "a window past its reset should read 0%"; }
 # config is read as text, never run: a command line in it must not run
 printf 'touch %s/sourced\nexport LK_USAGE_NO_5H="main work"\n' "$T" > "$HOME/.config/pierce-skill-kit/config"

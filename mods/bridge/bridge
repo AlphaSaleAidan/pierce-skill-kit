@@ -41,15 +41,25 @@ denied() ( # denied <relative path>: true if any part of it is on the deny-list 
   done
   exit 1 )
 
-list_files() { # list_files <dir>: files that may sync (relative paths); skipped big files are noted on stderr
+# what may move, as one awk pass (thousands of files stay fast). Same deny-list as denied(), plus names Windows can't hold.
+DENY_RE='^(\.\.|\.env.*|.*\.pem|.*\.key|id_.*|.*secret.*|.*\.p12|.*\.pfx|\.ssh|.*credential.*|.*token.*|\.git|\.netrc|\.npmrc|\.pypirc|\.pgpass|\.aws|\.docker|kubeconfig.*|.*\.kdbx|.*\.ppk|.*\.gpg|.*\.asc|\.htpasswd)$'
+list_meta() { # list_meta <dir>: path<TAB>bytes<TAB>mtime of files that may move; what's skipped (and why) goes to stderr
   [ -d "$1" ] || return 0
-  ( cd "$1" && find . -type f | sed 's|^\./||' | LC_ALL=C sort | while IFS= read -r f; do
-      denied "$f" && continue
-      s=$(wc -c < "$f" | tr -d ' ')
-      [ "$s" -le $MAX_FILE ] || { echo "bridge: skipped $f: $(((s + 1048575) / 1048576)) MB, over the $((MAX_FILE / 1048576)) MB cap" >&2; continue; }
-      printf '%s\n' "$f"
-    done )
+  ( cd "$1" || exit 0
+    n=$(find . -type f -path '*[[:cntrl:]]*' -exec printf x \; | wc -c | tr -d ' ')
+    [ "$n" = 0 ] || echo "bridge: skipped $(nfiles "$n") with a line break or control character in the name" >&2
+    if stat -c %s . > /dev/null 2>&1; then find . -type f ! -path '*[[:cntrl:]]*' -exec stat -c '%s	%Y	%n' {} +
+    else find . -type f ! -path '*[[:cntrl:]]*' -exec stat -f '%z	%m	%N' {} +; fi |
+    deny=$DENY_RE awk -F'\t' -v mf="$MAX_FILE" 'BEGIN { deny = ENVIRON["deny"] } {
+      p = $0; sub(/^[^\t]*\t[^\t]*\t\.\//, "", p); k = split(p, part, "/"); bad = 0; win = 0
+      for (i = 1; i <= k; i++) { c = tolower(part[i]); if (c ~ deny) bad = 1
+        if (part[i] ~ /[\\:*?"<>|]/ || part[i] ~ /[. ]$/ || c ~ /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/) win = 1 }
+      if (bad) next
+      if (win) { print "bridge: skipped " p ": Windows can\047t use that name (\\ : * ? \" < > |, a trailing dot or space, CON, NUL...)" > "/dev/stderr"; next }
+      if ($1 + 0 > mf) { printf "bridge: skipped %s: %d MB, over the %d MB cap\n", p, int(($1 + 1048575) / 1048576), mf / 1048576 > "/dev/stderr"; next }
+      print p "\t" $1 "\t" $2 }' | LC_ALL=C sort -t "$(printf '\t')" -k1,1 )
 }
+list_files() { list_meta "$1" | cut -f1; }   # list_files <dir>: relative paths that may move
 
 pack() { # pack <dir> <list> <out.tar>: tar the listed files, refusing anything over the 50 MB total cap
   total=0
@@ -85,7 +95,20 @@ clean() { LC_ALL=C tr -d '\000-\010\013-\037\177' | LC_ALL=C sed "s/$(printf '\3
 
 hash() { [ -f "$1" ] || return 0; { sha256sum "$1" 2>/dev/null || shasum -a 256 "$1"; } | cut -d' ' -f1; }
 nfiles() { if [ "$1" = 1 ]; then echo "1 file"; else echo "$1 files"; fi; }
-manifest() { list_files "$1" | while IFS= read -r f; do printf '%s\t%s\t%s\n' "$f" "$(hash "$1/$f")" "$(wc -c < "$1/$f" | tr -d ' ')"; done; }   # path<TAB>sha256<TAB>bytes
+manifest() { # manifest <dir>: path<TAB>sha256<TAB>bytes. With $HC set, only files whose size or time changed are hashed again
+  # shortcut: a same-size edit within the same second as the cached time is missed until the next change (like rsync)
+  m=$(mktemp); list_meta "$1" > "$m"; c=${HC:-/dev/null}; [ -f "$c" ] || c=/dev/null
+  awk -F'\t' -v need="$m.need" 'FILENAME == ARGV[1] { h[$1 "\t" $2 "\t" $3] = $4; next }
+    { k = $1 "\t" $2 "\t" $3; if (k in h) print k "\t" h[k]; else print $1 > need }' "$c" "$m" > "$m.hit"
+  if [ -s "$m.need" ]; then   # one sha256 process for all of them; ./ first so a name starting with - isn't an option
+    ( cd "$1" && sed 's|^|./|' "$m.need" | tr '\n' '\0' | if command -v sha256sum > /dev/null; then xargs -0 sha256sum; else xargs -0 shasum -a 256; fi ) |
+      awk -v meta="$m" 'BEGIN { FS = "\t"; while ((getline l < meta) > 0) { split(l, x, "\t"); sz[x[1]] = x[2]; mt[x[1]] = x[3] } }
+        { h = substr($0, 1, 64); p = substr($0, 67); sub(/^\.\//, "", p); if (p in sz) print p "\t" sz[p] "\t" mt[p] "\t" h }' >> "$m.hit"
+  fi
+  [ -z "${HC:-}" ] || { LC_ALL=C sort "$m.hit" > "$HC.new" && mv "$HC.new" "$HC"; }
+  awk -F'\t' '{ print $1 "\t" $4 "\t" $2 }' "$m.hit" | LC_ALL=C sort
+  rm -f "$m" "$m.need" "$m.hit"
+}
 bigcaps() { MAX_FILE=$FILES_MAX_FILE; MAX_TOTAL=$FILES_MAX_TOTAL; }
 keep() { # keep <root> <rel> <trash>: move the copy about to be replaced into <trash>/<time>/<rel>, so nothing is lost
   [ -f "$1/$2" ] || return 0; k=$3/$(date -u +%Y%m%dT%H%M%SZ)/$2; mkdir -p "$(dirname "$k")" && mv "$1/$2" "$k"; }
@@ -157,7 +180,7 @@ serve_sync() { # stdin: tar of the client's folder. stdout: tar of the merged sh
 }
 
 # ---------- the file store (server side): $LK_HOME/files, big caps, only changed files travel ----------
-files_env() { FILES=${LK_FILES:-$LK_HOME/files}; mkdir -p "$FILES"; bigcaps; }
+files_env() { FILES=${LK_FILES:-$LK_HOME/files}; mkdir -p "$FILES"; bigcaps; HC=$STATE/files-hash.tsv; }
 serve_files_ls() { files_env; manifest "$FILES" 2>/dev/null; }
 
 serve_files_put() { # stdin: tar of new/changed files. A copy it replaces goes to $STATE/files-trash.
@@ -268,7 +291,7 @@ do_sync() {
 }
 
 # ---------- the file store (your side): BRIDGE_FILES (default ~/PierceFiles) ----------
-files_cfg() { load_config; FILES=$BRIDGE_FILES; BASE=$DIR/files-base.tsv; mkdir -p "$FILES" || die "can't make $FILES"; bigcaps; }
+files_cfg() { load_config; FILES=$BRIDGE_FILES; BASE=$DIR/files-base.tsv; HC=$DIR/files-hash.tsv; mkdir -p "$FILES" || die "can't make $FILES"; bigcaps; }
 offline() { # the ssh call failed: say why in plain words
   case $(cat "$1" 2>/dev/null) in *"not a bridge action"*) die "the server has an older bridge. Update it once:  bridge setup $BRIDGE_VPS --name $BRIDGE_NAME";;
     *refused:*) die "the server said no (above)";; esac
@@ -278,6 +301,7 @@ hsize() { awk -v b="$1" 'BEGIN { if (b >= 1048576) printf "%.1f MB", b / 1048576
 files_scope() { # files_scope push|pull [path]: set $scope (relative to the store). push: a file from elsewhere is copied in first
   scope=; [ -n "${2:-}" ] || return 0
   case $2 in /*) q=$2;; *) q=./$2;; esac   # ./ first: a name starting with - is never read as an option
+  case $1$2 in pull/*) ;; pull*) scope=${2#./}; scope=${scope%/}; case $scope in *..*|*\\*) die "refused path: $2";; esac; return 0;; esac   # pull: relative = in the store
   if [ -f "$2" ] && a=$(cd "$(dirname "$q")" && pwd -P)/$(basename "$q") && r=$(cd "$FILES" && pwd -P) && case $a in "$r"/*) false;; esac; then
     [ "$1" = push ] || die "$2 is not in $FILES. Pull takes a path inside the store, e.g. bridge files pull clients"
     b=$(basename "$q"); ! denied "$b" || die "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer"
@@ -296,17 +320,18 @@ files_plan() { # files_plan: fills $t/mine, $t/srv, $t/plan (action<TAB>path: sa
   awk -F'\t' 'FILENAME == ARGV[1] { m[$1] = $2; a[$1] = 1; next } FILENAME == ARGV[2] { s[$1] = $2; a[$1] = 1; next } { o[$1] = $2 }
     END { for (f in a) { l = m[f]; v = s[f]; b = o[f]
       x = (l == v) ? "same" : (v == "") ? "up" : (l == "") ? "down" : (l == b) ? "down" : (v == b) ? "up" : "both"; print x "\t" f } }' \
-    "$t/mine" "$t/srv" "$BASE" | LC_ALL=C sort -t "$(printf '\t')" -k2 | while IFS="$(printf '\t')" read -r x f; do scoped "$f" && printf '%s\t%s\n' "$x" "$f"; done > "$t/plan"
+    "$t/mine" "$t/srv" "$BASE" | LC_ALL=C sort -t "$(printf '\t')" -k2 | awk -F'\t' -v sc="$scope" 'sc == "" || $2 == sc || index($2, sc "/") == 1' > "$t/plan"
 }
 agree() { # agree <manifest> <list of paths>: record those files' hashes as agreed by both sides
   awk -F'\t' 'FILENAME == ARGV[1] { w[$0] = 1; next } FILENAME == ARGV[2] { if ($1 in w) n[$1] = $2; next }
     !($1 in n) { print } END { for (f in n) print f "\t" n[f] }' "$2" "$1" "$BASE" > "$BASE.new" && mv "$BASE.new" "$BASE"
 }
-warn_secrets() { # say once per file what stays home
+warn_secrets() { # say once per file what stays home (one awk pass, same deny-list as list_meta)
   touch "$DIR/files-warned"
-  ( cd "$FILES" && find . -type f | sed 's|^\./||' ) | while IFS= read -r f; do
-    scoped "$f" && denied "$f" && ! grep -qxF -- "$f" "$DIR/files-warned" && { echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; printf '%s\n' "$f" >> "$DIR/files-warned"; }
-  done; }
+  ( cd "$FILES" && find . -type f ! -path '*[[:cntrl:]]*' | sed 's|^\./||' ) | deny=$DENY_RE awk -v sc="$scope" 'BEGIN { d = ENVIRON["deny"] }
+    sc != "" && $0 != sc && index($0, sc "/") != 1 { next } { k = split($0, p, "/"); for (i = 1; i <= k; i++) if (tolower(p[i]) ~ d) { print; next } }' |
+    grep -vxF -f "$DIR/files-warned" | while IFS= read -r f; do
+      echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; printf '%s\n' "$f" >> "$DIR/files-warned"; done; }
 files_status() {
   t=$(mktemp -d); files_scope pull "${1:-}"; files_plan; nope
   cat "$t/skip" >&2
@@ -334,11 +359,11 @@ files_push() {
     [ -n "${quiet:-}" ] || if [ "$sk" -gt 0 ] || [ "$bo" -gt 0 ]; then echo "nothing else to send"; else echo "up to date: the server already has ${scope:-everything in $FILES}"; fi
     cleanup "$t"; return 0
   fi
-  nb=$(batches "$t/mine" "$t/up"); total=$(wc -l < "$t/up" | tr -d ' '); done_n=0; i=0
+  nb=$(batches "$t/mine" "$t/up"); nall=$(wc -l < "$t/up" | tr -d ' '); done_n=0; i=0
   while [ $i -lt "$nb" ]; do
     while IFS= read -r f; do echo "  sending $f ($(hsize "$(wc -c < "$FILES/$f")"))"; done < "$t/b.$i"
     pack "$FILES" "$t/b.$i" "$t/up.tar" || { cleanup "$t"; exit 1; }
-    remote files-put "$BRIDGE_NAME" < "$t/up.tar" > /dev/null || { cleanup "$t"; die "push stopped after $(nfiles $done_n) of $total. Run it again to send the rest (finished files aren't sent twice)"; }
+    remote files-put "$BRIDGE_NAME" < "$t/up.tar" > /dev/null || { cleanup "$t"; die "push stopped after $(nfiles $done_n) of $nall. Run it again to send the rest (finished files aren't sent twice)"; }
     agree "$t/mine" "$t/b.$i"; done_n=$((done_n + $(wc -l < "$t/b.$i"))); i=$((i + 1))
   done
   echo "sent $(nfiles $done_n) to the server"
@@ -349,10 +374,10 @@ files_pull() {
   awk -F'\t' '$1 == "down" || $1 == "both" { print $2 }' "$t/plan" > "$t/want"
   awk -F'\t' '$1 == "same" { print $2 }' "$t/plan" > "$t/same"; [ -s "$t/same" ] && agree "$t/srv" "$t/same"
   [ -s "$t/want" ] || { echo "up to date: nothing new on the server"; cleanup "$t"; return 0; }
-  nb=$(batches "$t/srv" "$t/want"); total=$(wc -l < "$t/want" | tr -d ' '); n=0; i=0
+  nb=$(batches "$t/srv" "$t/want"); nall=$(wc -l < "$t/want" | tr -d ' '); n=0; i=0
   while [ $i -lt "$nb" ]; do
     rm -rf "$t/d"
-    { remote files-get < "$t/b.$i" > "$t/down.tar" && unpack "$t/down.tar" "$t/d"; } || { cleanup "$t"; die "pull stopped after $(nfiles $n) of $total. Run it again to get the rest (finished files aren't fetched twice)"; }
+    { remote files-get < "$t/b.$i" > "$t/down.tar" && unpack "$t/down.tar" "$t/d"; } || { cleanup "$t"; die "pull stopped after $(nfiles $n) of $nall. Run it again to get the rest (finished files aren't fetched twice)"; }
     list_files "$t/d" > "$t/got"; : > "$t/ok"
     while IFS= read -r f; do
       safe_dest "$FILES" "$f" || { echo "bridge: $f: a folder on its path is a link here; not written" >&2; continue; }
@@ -447,6 +472,7 @@ main() {
       case $sub in
         ''|status) files_cfg; files_status "${1:-}";;
         setup) load_config; f=${1:-$HOME/PierceFiles}; mkdir -p "$f" && f=$(cd "$f" && pwd -P) || die "can't use $f"
+          [ "$f" = "$BRIDGE_FILES" ] || rm -f "$DIR/files-base.tsv" "$DIR/files-hash.tsv" "$DIR/files-warned"   # a new folder starts with no history
           grep -v '^BRIDGE_FILES=' "$DIR/config" > "$DIR/config.new"; printf 'BRIDGE_FILES=%s\n' "$f" >> "$DIR/config.new"; mv "$DIR/config.new" "$DIR/config"
           BRIDGE_FILES=$f; FILES=$f; t=$(mktemp)
           remote files-ls < /dev/null > /dev/null 2> "$t" || { cat "$t" >&2; offline "$t"; }; rm -f "$t"
@@ -457,7 +483,8 @@ main() {
         share) files_cfg; [ -n "${1:-}" ] || die "usage: bridge files share <path> [minutes, default 60]"
           quiet=1 files_push "$1"; m=${2:-60}; t=$(mktemp)
           printf '%s\n' "$scope" | remote files-share "$m" 2> "$t" || { cat "$t" >&2; rm -f "$t"; die "no link made"; }; cat "$t" >&2; rm -f "$t";;
-        *) die "usage: bridge files [setup [folder] | push [path] | pull [path] | share <path> [minutes]]";;
+        -*) die "usage: bridge files [path] | setup [folder] | push [path] | pull [path] | share <path> [minutes]";;
+        *) files_cfg; files_status "$sub";;   # bridge files <path>: the status of just that
       esac;;
     reply) server_env; [ $# -gt 0 ] || die "usage: bridge reply \"<text>\""
       printf '%s\t%s\n' "$(date -u +%Y-%m-%dT%H:%MZ)" "$(printf '%s' "$*" | tr '\r\n\t' '   ')" >> "$STATE/outbox.tsv"
