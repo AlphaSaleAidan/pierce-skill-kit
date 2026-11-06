@@ -54,6 +54,24 @@ echo "$out" | grep -q "  spare  .*(old: 7h ago)" || { echo "$out"; fail "7-hour-
 echo "$out" | grep "▶ main" | grep -q "old:" && fail "fresh line marked old"
 printf '%s' "$raw" | grep "  work  " | grep -q "$(printf '\033')\[2m▰" || fail "old numbers not dimmed"
 echo "ok: numbers over 6h old are dimmed and say how old"
+# one damaged usage file only marks its own account; offset reset times parse; usage files are written via temp + mv
+echo '{"seven_day":{"used_percentage":"12"}}' > "$cache/usage-broken.json"; echo '{oops' > "$cache/usage-junk.json"
+echo "{\"seven_day\":{\"used_percentage\":30,\"resets_at\":\"$(date -u -d '@'$((now + 10500)) +%Y-%m-%dT%H:%M:%S)+02:00\"}}" > "$cache/usage-tz.json"
+echo "{\"seven_day\":{\"used_percentage\":30,\"resets_at\":\"$(date -u -d '@'$((now + 7500)) +%Y-%m-%dT%H:%M:%S)-05:00\"}}" > "$cache/usage-tzw.json"
+o2=$(draw "$(j '{"five_hour":{"used_percentage":40},"seven_day":{"used_percentage":91}}')" 2>&1)
+echo "$o2" | grep -q "▶ main  5h" || { echo "$o2"; fail "a bad file blanked the good accounts"; }
+echo "$o2" | grep -qE "^  broken  \(unreadable\)$" || { echo "$o2"; fail "string percentage: no (unreadable) note"; }
+echo "$o2" | grep -qE "^  junk  \(unreadable\)$" || { echo "$o2"; fail "invalid JSON: no (unreadable) note"; }
+echo "$o2" | grep -q "jq: error" && { echo "$o2"; fail "jq error shown"; }
+# +02:00 stamp = 2h earlier in UTC (~55m left); -05:00 stamp = 5h later (7500s + 18000s = 7h)
+echo "$o2" | grep -q "  tz  .*week ▰▰▱▱▱ 30% ↻5[45]m" || { echo "$o2"; fail "+02:00 reset time not parsed"; }
+echo "$o2" | grep -q "  tzw  .*week ▰▰▱▱▱ 30% ↻7h" || { echo "$o2"; fail "-05:00 reset time not parsed"; }
+echo "ok: a damaged usage file marks only its own account; +02:00 / -05:00 reset times show a countdown"
+rm -f "$cache/usage-broken.json" "$cache/usage-junk.json" "$cache/usage-tz.json" "$cache/usage-tzw.json"
+printf '%s' "$(j '{"seven_day":{"used_percentage":5}}')" | sh "$SL" >/dev/null
+for f in "$cache"/usage-main.json.*; do [ -e "$f" ] && fail "temp usage file left behind"; done
+grep -qF 'mv "$u/usage-$acct.json.$$"' "$KIT/mods/statusline/statusline.sh" || fail "usage file not written via temp + mv"
+echo "ok: usage file written by temp + mv"
 # macOS: BSD stat/date (no stat -c, no date -r <file>): same lines, same ages
 mkdir -p "$T/bsd"; RS=$(command -v stat); RD=$(command -v date)
 # shellcheck disable=SC2016  # the stubs' $1 / $@ are meant for the stub, not this shell

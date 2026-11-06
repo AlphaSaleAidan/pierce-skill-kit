@@ -54,7 +54,7 @@ list_meta() { # list_meta <dir>: path<TAB>bytes<TAB>mtime of files that may move
       p = $0; sub(/^[^\t]*\t[^\t]*\t\.\//, "", p); k = split(p, part, "/"); bad = 0; win = 0
       for (i = 1; i <= k; i++) { c = tolower(part[i]); if (c ~ deny) bad = 1
         if (part[i] ~ /[\\:*?"<>|]/ || part[i] ~ /[. ]$/ || c ~ /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/) win = 1 }
-      if (bad) next
+      if (bad) { if (ENVIRON["LM_DENY_NOTE"] != "") print "bridge: skipped " p ": looks like a secret or key (the deny-list)" > "/dev/stderr"; next }
       if (win) { print "bridge: skipped " p ": Windows can\047t use that name (\\ : * ? \" < > |, a trailing dot or space, CON, NUL...)" > "/dev/stderr"; next }
       if ($1 + 0 > mf) { printf "bridge: skipped %s: %d MB, over the %d MB cap\n", p, int(($1 + 1048575) / 1048576), mf / 1048576 > "/dev/stderr"; next }
       print p "\t" $1 "\t" $2 }' | LC_ALL=C sort -t "$(printf '\t')" -k1,1 )
@@ -181,7 +181,7 @@ serve_sync() { # stdin: tar of the client's folder. stdout: tar of the merged sh
 
 # ---------- the file store (server side): $LK_HOME/files, big caps, only changed files travel ----------
 files_env() { FILES=${LK_FILES:-$LK_HOME/files}; mkdir -p "$FILES"; bigcaps; HC=$STATE/files-hash.tsv; }
-serve_files_ls() { files_env; manifest "$FILES" 2>/dev/null; }
+serve_files_ls() { files_env; LM_DENY_NOTE=1; export LM_DENY_NOTE; manifest "$FILES"; }   # skip notes go to stderr: the client shows them
 
 serve_files_put() { # stdin: tar of new/changed files. A copy it replaces goes to $STATE/files-trash.
   files_env; t=$(mktemp -d); trap 'cleanup "$t"' EXIT
@@ -307,6 +307,8 @@ files_scope() { # files_scope push|pull [path]: set $scope (relative to the stor
     [ "$1" = push ] || die "$2 is not in $FILES. Pull takes a path inside the store, e.g. bridge files pull clients"
     b=$(basename "$q"); ! denied "$b" || die "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer"
     [ "$(wc -c < "$2")" -le $MAX_FILE ] || die "$b is over the 100 MB cap"
+    [ ! -d "$FILES/$b" ] || die "there's already a folder called $b in $FILES. Rename the file, then push it"
+    e=$(mktemp); remote ping < /dev/null > /dev/null 2> "$e" || { cat "$e" >&2; offline "$e"; }; rm -f "$e"   # offline: don't touch the store
     [ -f "$FILES/$b" ] && echo "replaced $b in $FILES (old copy in $DIR/files-trash)"
     keep "$FILES" "$b" "$DIR/files-trash"; cp "$2" "$FILES/$b" && echo "copied $b into $FILES"; scope=$b; return 0
   fi
@@ -316,6 +318,8 @@ files_scope() { # files_scope push|pull [path]: set $scope (relative to the stor
 }
 files_plan() { # files_plan: fills $t/mine, $t/srv, $t/plan (action<TAB>path: same|up|down|both|clash|case), $t/skip
   remote files-ls < /dev/null > "$t/srv" 2> "$t/err" || { cat "$t/err" >&2; offline "$t/err"; }
+  grep '^bridge: skipped' "$t/err" | sed 's/^bridge: skipped/bridge: on the server, skipped/' |
+    awk -v sc="$scope" '{ p = $0; sub(/^bridge: on the server, skipped /, "", p) } sc == "" || index(p, sc) == 1' > "$t/srvskip"
   manifest "$FILES" > "$t/mine" 2> "$t/skip"
   touch "$BASE"
   # base = the hash both sides last agreed on: only the side that changed since then wins; both changed = conflict.
@@ -342,20 +346,25 @@ warn_secrets() { # say once per file what stays home (one awk pass, same deny-li
       echo "bridge: kept on this computer (looks like a secret or key): $f" >&2; printf '%s\n' "$f" >> "$DIR/files-warned"; done; }
 files_status() {
   t=$(mktemp -d); files_scope pull "${1:-}"; files_plan; nope
-  cat "$t/skip" >&2
+  cat "$t/skip" "$t/srvskip" >&2
   [ -s "$t/plan" ] || { echo "the file store is empty: put files in $FILES, then bridge files push"; cleanup "$t"; return 0; }
   awk -F'\t' '{ w = ($1 == "same") ? "same     " : ($1 == "up") ? "to push  " : ($1 == "down") ? "to pull  " : ($1 == "both") ? "CHANGED BOTH SIDES (pull keeps both)  " : "SKIPPED (see above)  "; print "  " w " " $2 }' "$t/plan"
-  awk -F'\t' '{ n[$1]++ } END { printf "%d same, %d to push, %d to pull, %d changed on both sides, %d skipped\n", n["same"], n["up"], n["down"], n["both"], n["clash"] + n["case"] }' "$t/plan"
+  awk -F'\t' -v k="$(held "$t/skip") $(held "$t/srvskip")" '{ n[$1]++ } END { split(k, x, " "); printf "%d same, %d to push, %d to pull, %d changed on both sides, %d skipped\n", n["same"], n["up"], n["down"], n["both"], n["clash"] + n["case"] + x[1] + x[2] }' "$t/plan"
   cleanup "$t"
 }
-batches() { # batches <manifest> <list>: split the list into $t/b.0, b.1 ... of up to FILES_BATCH bytes; prints the count
+batches() { # batches <manifest> <list>: split the list into $t/b.0, b.1 ... of up to FILES_BATCH bytes and 4,000 files
+  # (the archive limit is 5,000 entries); prints the count
   rm -f "$t"/b.*
   awk -F'\t' -v cap="$FILES_BATCH" -v d="$t" 'FILENAME == ARGV[1] { sz[$1] = $3; next }
-    { s = sz[$0] + 0; if (n && tot + s > cap) { b++; tot = 0; n = 0 } print > (d "/b." (b + 0)); tot += s; n++ }' "$1" "$2"
+    { s = sz[$0] + 0; if (n && (tot + s > cap || n >= 4000)) { b++; tot = 0; n = 0 } print > (d "/b." (b + 0)); tot += s; n++ }' "$1" "$2"
   ls "$t" | grep -c '^b\.'
 }
 nope() { # the path matches nothing here or on the server
-  [ -n "$scope" ] && [ ! -s "$t/plan" ] && { cleanup "$t"; die "no file or folder called $scope in $FILES or on the server"; }; return 0; }
+  [ -n "$scope" ] && [ ! -s "$t/plan" ] || return 0
+  m=$(grep -F -- "skipped $scope" "$t/srvskip" | head -n 1)
+  cleanup "$t"; [ -z "$m" ] || die "${m#bridge: }"; die "no file or folder called $scope in $FILES or on the server"; }
+held() { # held <file with notes>: how many files those notes hold back
+  awk '/^bridge: (on the server, )?skipped [0-9]+ files? with/ { n += $3 + 0; next } /skipped|not sent/ { n++ } END { print n + 0 }' "$1"; }
 files_push() {
   files_scope push "${1:-}"; t=$(mktemp -d); files_plan; nope; warn_secrets
   cat "$t/skip" >&2
@@ -364,7 +373,7 @@ files_push() {
   awk -F'\t' '$1 == "up" { print $2 }' "$t/plan" > "$t/up"
   awk -F'\t' '$1 == "same" { print $2 }' "$t/plan" > "$t/same"; [ -s "$t/same" ] && agree "$t/mine" "$t/same"
   left=$(awk -F'\t' '$1 == "both" || $1 == "clash" || $1 == "case"' "$t/plan" | wc -l | tr -d ' ')
-  sk=$(($(grep -c '^bridge: skipped' "$t/skip") + left))
+  sk=$(($(held "$t/skip") + left))
   if [ ! -s "$t/up" ]; then
     [ -n "${quiet:-}" ] || if [ "$sk" -gt 0 ]; then echo "nothing else to send ($(nfiles $sk) held back, see above)"; else echo "up to date: the server already has ${scope:-everything in $FILES}"; fi
     cleanup "$t"; [ "$left" = 0 ] || exit 3; return 0
@@ -385,8 +394,10 @@ files_pull() {
   awk -F'\t' '$1 == "down" || $1 == "both" { print $2 }' "$t/plan" > "$t/want"
   awk -F'\t' '$1 == "both" { print $2 }' "$t/plan" > "$t/both"
   awk -F'\t' '$1 == "same" { print $2 }' "$t/plan" > "$t/same"; [ -s "$t/same" ] && agree "$t/srv" "$t/same"
-  left=$(awk -F'\t' '$1 == "clash" || $1 == "case"' "$t/plan" | wc -l | tr -d ' ')
-  [ -s "$t/want" ] || { echo "up to date: nothing new on the server"; cleanup "$t"; [ "$left" = 0 ] || exit 3; return 0; }
+  cat "$t/srvskip" >&2
+  left=$(( $(awk -F'\t' '$1 == "clash" || $1 == "case"' "$t/plan" | wc -l | tr -d ' ') + $(held "$t/srvskip") ))
+  [ -s "$t/want" ] || { if [ "$left" = 0 ]; then echo "up to date: nothing new on the server"; else echo "nothing else to get ($(nfiles $left) can't come down, see above)"; fi
+    cleanup "$t"; [ "$left" = 0 ] || exit 3; return 0; }
   nb=$(batches "$t/srv" "$t/want"); nall=$(wc -l < "$t/want" | tr -d ' '); n=0; i=0; links=$(find "$FILES" -type l | head -n 1)
   while [ $i -lt "$nb" ]; do
     rm -rf "$t/d"; t0=$(date +%s)
@@ -407,7 +418,7 @@ files_pull() {
     rm -f "$t/new"; speed "$(wc -c < "$t/down.tar")" "$t0"
     [ -s "$t/ok" ] && agree "$t/srv" "$t/ok"; i=$((i + 1))
   done
-  echo "got $(nfiles $n) from the server, in $FILES"
+  echo "got $(nfiles $n) from the server, in $FILES"; [ "$left" = 0 ] || echo "$(nfiles $left) held back (see above)"
   cleanup "$t"; [ "$left" = 0 ] || exit 3
 }
 speed() { # speed <bytes> <start epoch>: one line per batch over 5 MB, so a big transfer isn't silent
@@ -503,6 +514,8 @@ main() {
         pull) files_cfg; files_pull "$@";;
         share) files_cfg; [ -n "${1:-}" ] || die "usage: bridge files share <path> [minutes, default 60]"
           m=${2:-60}; case $m in ''|*[!0-9]*) die "minutes must be a number from 1 to 1440";; esac; [ "$m" -ge 1 ] && [ "$m" -le 1440 ] || die "minutes must be 1 to 1440"
+          t=$(mktemp); printf '\n' | remote files-share "$m" > /dev/null 2> "$t"   # sharing off? say so before uploading anything
+          grep -q 'sharing is off' "$t" && { cat "$t" >&2; rm -f "$t"; die "no link made"; }; rm -f "$t"
           files_scope push "$1"; ( quiet=1 files_push "$FILES/$scope" ) || [ $? = 3 ] || exit 1; t=$(mktemp)
           printf '%s\n' "$scope" | remote files-share "$m" 2> "$t" || { cat "$t" >&2; rm -f "$t"; die "no link made"; }; cat "$t" >&2; rm -f "$t";;
         -*) die "usage: bridge files [path] | setup [folder] | push [path] | pull [path] | share <path> [minutes]";;

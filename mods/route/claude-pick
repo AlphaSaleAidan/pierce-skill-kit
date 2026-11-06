@@ -2,7 +2,7 @@
 # claude-pick - start Claude on whichever of your accounts has the most room left, from the usage its status line saved.
 #   claude-pick                menu, most room first (Enter = the top one)
 #   claude-pick auto [args]    no menu: start Claude on the account with the most room (args go to claude, e.g. -p "...")
-#   claude-pick list           plain text, one line per account (5h / weekly %, age, most room); no menu, works over ssh
+#   claude-pick list [--json]  one line per account (5h / weekly %, age, most room); no menu, works over ssh; --json for scripts
 #   claude-pick order          print account config folders, most room first (for scripts)
 #   claude-pick add <name>     same as claude-acct add
 #   claude-pick <name> [args]  same as claude-acct run
@@ -26,7 +26,7 @@ ranked() {
   "$ACCT" names | while IFS= read -r n; do
     f=$CACHE/usage-$n.json; q=$(printf '%s' "$n" | tr ' ' '\037')
     if [ -s "$f" ]; then now=$(date +%s); a=$(( now - $(mtime "$f") )); jq -r --arg n "$q" --arg a "$a" --argjson now "$now" '
-      def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null;
+      def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "")) as $s | ($s | capture("(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2})$") // {s: "+", h: "00", m: "00"}) as $o | ($s | sub("[+-][0-9]{2}:[0-9]{2}$"; "Z") | fromdateiso8601) - (if $o.s == "-" then -1 else 1 end) * (($o.h | tonumber) * 3600 + ($o.m | tonumber) * 60) end) catch null;
       def pct(w): if w == null or w.used_percentage == null then null
         elif (ts(w.resets_at) // ($now + 1)) < $now then 0 else (w.used_percentage | round) end;
       def dur(s): ([0, s / 60 | floor] | max) as $m
@@ -56,7 +56,13 @@ rows() { win=1; nodata < "$1" && { echo "$NODATA"; win=0; }
 
 case $1 in
   order) ranked | while read -r n _; do dir_of "$(unq "$n")"; done;;
-  list) t=$(mktemp) || exit 1; trap 'rm -f "$t"' EXIT; ranked > "$t"; rows "$t" 0;;
+  list) t=$(mktemp) || exit 1; trap 'rm -f "$t"' EXIT; ranked > "$t"
+    if [ "$2" = --json ]; then   # [{account, weekly_pct, five_hour_pct, age_seconds, most_room}], null = no number
+      rows "$t" 0 >/dev/null; tr '\037' ' ' < "$t" | jq -Rn --argjson win "$win" '[inputs | capture("^(?<n>.*) (?<f>[01]) (?<s>[01]) (?<w>[0-9]+) (?<h>[0-9]+) (?<a>[0-9-]+) ")
+        | {account: .n, weekly_pct: (if .w == "999" then null else (.w | tonumber) end), five_hour_pct: (if .h == "999" then null else (.h | tonumber) end),
+           age_seconds: (if .a == "-" then null else (.a | tonumber) end), most_room: false, s}]
+        | (if $win == 1 and length > 0 and .[0].s == "0" then .[0].most_room = true else . end) | map(del(.s))'
+    else rows "$t" 0; fi;;
   auto) shift; r=$(ranked)
     printf '%s\n' "$r" | awk '$2 == 1 { n = $1; $1 = $2 = $3 = $4 = $5 = $6 = $7 = ""; sub(/^ +/, ""); print "claude-pick: " n ": " $0 ", skipped" }' | tr '\037' ' ' >&2
     n=$(printf '%s\n' "$r" | awk '$2 == 0 { print $1; exit }')

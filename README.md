@@ -18,11 +18,12 @@
   <a href="CHANGELOG.md"><img alt="Updates" src="https://img.shields.io/github/v/release/AlphaSaleAidan/pierce-skill-kit?label=updates&style=flat-square&color=d70000"></a>
 </p>
 
-> **Latest (v0.4.3):** reports never type over you or into a login prompt (`lead-say`); `leader` views the lead with no tmux on your screen. **v0.4.2:** the brain-loop mod (Obsidian + Opus + Jev loop: a linked vault, report triage, plan grading, MCP tools) and the `tab-plan` skill. **v0.4.0:** 4 more skills (22 in all), 60+ more third-party skills linked (Apple Xcode 27, App Store review audits, REA…), new skills routed automatically (`skill-route-sync`), and the skill-recommender mod ("Switch to `<skill>`?"). **v0.3.3:** `claude-tab -a` checks the account first. **v0.3.0:** the bridge: Claude Code on your own computer messages the server lead over SSH.
-> **v0.5.0 (upgrade: `lead update`):** strict rules, each backed by a tool: `link-check` (real-browser link test before
+> **Next release:** a file store in the bridge (`bridge files push` / `pull`), `claude-pick` (start Claude on the account with the most room) and one-command usage bars for every account.
+> **Latest (v0.5.0), upgrade with `lead update`:** strict rules, each backed by a tool: `link-check` (real-browser link test before
 > any send), `go-live` (preflight + auto-rollback releases), `inbox-since`, `post-once`, `secret-in`, a proof gate on
 > `report done`, and the `lead-cap` / `send-guard` hooks. See [RULES.md](RULES.md#hard-rules-enforced-by-a-tool-v05).
-> **v0.2.0:** separate Claude accounts (`claude-acct`); update notes and releases. **v0.1.0:** one-line setup, `lead update` / `lead doctor`, usage bars, copy no longer jumps, mods + 18 skills.
+> **v0.4.x:** reports never type over you (`lead-say`), the brain-loop mod, the `tab-plan` skill, 22 skills, the skill-recommender mod.
+> **v0.3.0:** the bridge. **v0.2.0:** separate Claude accounts (`claude-acct`). **v0.1.0:** one-line setup, `lead update` / `lead doctor`.
 > Already installed? Run `lead update`. All changes: [CHANGELOG.md](CHANGELOG.md).
 
 Run many Claude Code sessions at once without losing track of them. One **lead** session manages a set of
@@ -133,14 +134,16 @@ Plus recommended third-party skills (linked, not copied, with license and instal
 ([docs/skill-routing.md](docs/skill-routing.md)).
 
 ## Mods
-Claude Code plugins and hooks that go with it, one command each ([mods/README.md](mods/README.md)): **agent-board**
-(live subagent board + ask tool + lead relay), **model-map** (remap subagent models live), **projects-hub** (`/hub`:
-projects, sessions, PRs, services), **statusline** (with 5h + weekly usage bars for every account: `sh mods/usage/install.sh`), **bridge** (Claude Code on your own computer talks to the lead
-over SSH, plus a file store for big files both ways: [docs/bridge.md](docs/bridge.md#file-store-big-files-both-ways)), **skill-recommender** (asks "Switch to `<skill>`?" when an installed
-skill fits a tough task better), **route**
-(`claude-pick`: start Claude on your least-used account), **brain-loop** (the loop below), the **lead-guard**, **review-gate** and
-**mail-no-links** hooks, and `mods/extras.sh` for everything else (official plugins, Ponytail, MCP servers, Jumping
-Rope, the usage MCP, Ruflo + overlay).
+Claude Code plugins and hooks, one command each. Install lines and details: [mods/README.md](mods/README.md).
+- **agent-board**: live subagent board, an ask tool, lead relay.
+- **model-map**: remap subagent models live.
+- **projects-hub**: `/hub` shows projects, sessions, PRs, services.
+- **statusline**: 5-hour + weekly usage bars for every account (`sh mods/usage/install.sh`).
+- **bridge**: your own computer talks to the lead over SSH, plus a file store ([docs/bridge.md](docs/bridge.md#file-store-big-files-both-ways)).
+- **route**: `claude-pick` starts Claude on your least-used account.
+- **skill-recommender**: asks "Switch to `<skill>`?" when another skill fits better.
+- **brain-loop**: the loop below.
+- **hooks** (lead-guard, review-gate, mail-no-links) and `mods/extras.sh` (official plugins, MCP servers, Ponytail, Ruflo).
 
 ## Obsidian + Opus + Jev loop
 An optional mod (`mods/brain-loop`) that closes the loop around the lead: **plan → act → observe → improve**.

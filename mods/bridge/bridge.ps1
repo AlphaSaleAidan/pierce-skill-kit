@@ -119,7 +119,7 @@ function Invoke-Ssh([string]$hostSpec, [string]$remoteCmd, [string]$key, [string
   } catch { }  # the server may refuse and close stdin early; its stderr says why
   $p.WaitForExit(); $outTask.Wait()
   if ($fs) { $fs.Close() }
-  $err = $errTask.Result; if ($err) { [Console]::Error.Write($err) }
+  $err = $errTask.Result; if ($err -and -not $script:QuietErr) { [Console]::Error.Write($err) }
   return [pscustomobject]@{ Code = $p.ExitCode; Err = $err; Out = $(if ($OutFile) { '' } else { $outTask.Result }) }
 }
 
@@ -178,14 +178,17 @@ function Stop-Remote($c, $r) {   # an ssh call failed: say why in plain words
   Fail "can't reach $($c.BRIDGE_VPS) (offline, asleep or no network). Nothing changed; your files are still in $($c.BRIDGE_FILES). Try again later."
 }
 function Get-ServerFiles($c) {
-  $r = Invoke-Remote $c 'files-ls' -InBytes ([byte[]]@()); if ($r.Code) { Stop-Remote $c $r }
+  $script:QuietErr = $true; try { $r = Invoke-Remote $c 'files-ls' -InBytes ([byte[]]@()) } finally { $script:QuietErr = $false }
+  if ($r.Code) { if ($r.Err) { [Console]::Error.Write($r.Err) }; Stop-Remote $c $r }
+  # what the server won't send (too big, deny-list, a name Windows can't hold), shown as "on the server, skipped ..."
+  $script:SrvSkip = @(($r.Err -split "`n") | Where-Object { $_ -match '^bridge: skipped' } | ForEach-Object { $_.TrimEnd("`r") -replace '^bridge: skipped', 'bridge: on the server, skipped' })
   $h = New-Object 'Collections.Generic.Dictionary[string,string]'; $script:SrvSize = New-Object 'Collections.Generic.Dictionary[string,long]'
   foreach ($l in ($r.Out -split "`n")) { $p = $l.TrimEnd("`r").Split("`t"); if ($p.Count -ge 2 -and $p[0]) { $h[$p[0]] = $p[1]; if ($p.Count -ge 3) { $script:SrvSize[$p[0]] = [long]$p[2] } } }
   return $h
 }
 function Split-Batches([string[]]$files, $sizeOf) {  # lists of up to $FilesBatch bytes each
   $out = New-Object Collections.Generic.List[object]; $cur = New-Object Collections.Generic.List[string]; $tot = [long]0
-  foreach ($f in $files) { $s = [long](& $sizeOf $f); if ($cur.Count -and $tot + $s -gt $FilesBatch) { $out.Add([string[]]$cur.ToArray()); $cur.Clear(); $tot = 0 }; $cur.Add($f); $tot += $s }
+  foreach ($f in $files) { $s = [long](& $sizeOf $f); if ($cur.Count -and ($tot + $s -gt $FilesBatch -or $cur.Count -ge 4000)) { $out.Add([string[]]$cur.ToArray()); $cur.Clear(); $tot = 0 }; $cur.Add($f); $tot += $s }
   if ($cur.Count) { $out.Add([string[]]$cur.ToArray()) }
   return ,$out
 }
@@ -208,6 +211,8 @@ function Get-Scope($c, [string]$mode, [string]$p) {  # a path inside the store -
       if ($mode -ne 'push') { Fail "$p is not in $root. Pull takes a path inside the store, e.g. bridge files pull clients" }
       $b = Split-Path $full -Leaf
       if (Test-Denied $b) { Fail "refused: $b looks like a secret or key (.env, *.pem, token...), so it never leaves this computer" }
+      if (Test-Path -LiteralPath (Join-Path $root $b) -PathType Container) { Fail "there's already a folder called $b in $root. Rename the file, then push it" }
+      $r = Invoke-Remote $c 'ping' -InBytes ([byte[]]@()); if ($r.Code) { Stop-Remote $c $r }   # offline: don't touch the store
       if ((Get-Item -LiteralPath $full -Force).Length -gt $MaxFile) { Fail "$b is over the 100 MB cap" }
       if (Test-Path -LiteralPath (Join-Path $root $b)) { [Console]::Out.WriteLine("replaced $b in $root (old copy in $(Join-Path $Dir 'files-trash'))") }
       Save-Old $root $b; Copy-Item -LiteralPath $full -Destination (Join-Path $root $b) -Force
@@ -260,14 +265,20 @@ function Get-StoreNotes($c, [string]$scope) {  # say once per file what stays ho
   return $big
 }
 function Show-Speed([long]$bytes, $sw) { if ($bytes -ge 5MB) { $s = [Math]::Max(1, [Math]::Round($sw.Elapsed.TotalSeconds)); Write-Output ('  ... {0:N1} MB in {1} s ({2:N1} MB/s)' -f ($bytes / 1MB), $s, ($bytes / 1MB / $s)) } }
-function Test-Nope($c, [string]$scope, $plan) { if ($scope -and -not $plan.Count) { Fail "no file or folder called $scope in $($c.BRIDGE_FILES) or on the server" } }
+function Test-Nope($c, [string]$scope, $plan) {
+  if (-not $scope -or $plan.Count) { return }
+  $m = @($script:SrvSkip | Where-Object { $_.Contains("skipped $scope") }) | Select-Object -First 1
+  if ($m) { Fail ($m -replace '^bridge: ', '') }; Fail "no file or folder called $scope in $($c.BRIDGE_FILES) or on the server"
+}
+function Get-SrvSkip([string]$scope) { return @($script:SrvSkip | Where-Object { -not $scope -or ($_ -replace '^bridge: on the server, skipped ', '').StartsWith($scope) }) }
 function Show-Status($c, [string]$p) {
   $scope = Get-Scope $c 'pull' $p; $plan = Get-Plan $c $scope; Test-Nope $c $scope $plan
+  $ss = Get-SrvSkip $scope; foreach ($l in $ss) { [Console]::Error.WriteLine($l) }
   if (-not $plan.Count) { Write-Output "the file store is empty: put files in $($c.BRIDGE_FILES), then bridge files push"; return }
   foreach ($x in $plan) { $w = switch ($x.A) { 'same' { 'same     ' } 'up' { 'to push  ' } 'down' { 'to pull  ' } 'both' { 'CHANGED BOTH SIDES (pull keeps both)  ' } default { 'SKIPPED (see above)  ' } }; Write-Output "  $w $($x.F)" }
   $n = @{}; foreach ($x in $plan) { $n[$x.A] = 1 + $(if ($n.ContainsKey($x.A)) { $n[$x.A] } else { 0 }) }
   $g = { param($k) if ($n.ContainsKey($k)) { $n[$k] } else { 0 } }
-  Write-Output "$(& $g 'same') same, $(& $g 'up') to push, $(& $g 'down') to pull, $(& $g 'both') changed on both sides, $((& $g 'clash') + (& $g 'case')) skipped"
+  Write-Output "$(& $g 'same') same, $(& $g 'up') to push, $(& $g 'down') to pull, $(& $g 'both') changed on both sides, $((& $g 'clash') + (& $g 'case') + $ss.Count) skipped"
 }
 function Push-Files($c, [string]$p, [bool]$quiet = $false) {
   $script:Scope = Get-Scope $c 'push' $p; $root = $c.BRIDGE_FILES
@@ -297,7 +308,8 @@ function Push-Files($c, [string]$p, [bool]$quiet = $false) {
 function Pull-Files($c, [string]$p) {
   $scope = Get-Scope $c 'pull' $p; $root = $c.BRIDGE_FILES
   $plan = Get-Plan $c $scope; Test-Nope $c $scope $plan
-  $script:Left = @($plan | Where-Object { $_.A -in @('clash', 'case') }).Count
+  $ss = Get-SrvSkip $scope; foreach ($l in $ss) { [Console]::Error.WriteLine($l) }
+  $script:Left = @($plan | Where-Object { $_.A -in @('clash', 'case') }).Count + $ss.Count
   $same = @($plan | Where-Object { $_.A -eq 'same' } | ForEach-Object { $_.F }); if ($same.Count) { Save-Agreed $script:Srv $same }
   $both = @($plan | Where-Object { $_.A -eq 'both' } | ForEach-Object { $_.F })
   $want = [string[]]@($plan | Where-Object { $_.A -eq 'down' -or $_.A -eq 'both' } | ForEach-Object { $_.F })
@@ -307,7 +319,7 @@ function Pull-Files($c, [string]$p) {
     $want = [string[]]@($want | Where-Object {
       if ($seen.Add($_) -or $script:Mine.ContainsKey($_)) { $true } else { [Console]::Error.WriteLine("bridge: skipped ${_}: Windows can't keep two names that differ only in capitals. Rename one on the server"); $false } })
   }
-  if (-not $want.Count) { Write-Output 'up to date: nothing new on the server'; return }
+  if (-not $want.Count) { if ($script:Left) { Write-Output "nothing else to get ($(Get-Count $script:Left) can't come down, see above)" } else { Write-Output 'up to date: nothing new on the server' }; return }
   $t = Join-Path ([IO.Path]::GetTempPath()) ("bridge-" + [guid]::NewGuid().ToString('N')); New-Item -ItemType Directory -Path $t | Out-Null
   try {
     $n = 0
@@ -335,7 +347,7 @@ function Pull-Files($c, [string]$p) {
     }
     if ($ok.Count) { Save-Agreed $script:Srv $ok }
     }
-    Write-Output "got $(Get-Count $n) from the server, in $root"
+    Write-Output "got $(Get-Count $n) from the server, in $root"; if ($script:Left) { Write-Output "$(Get-Count $script:Left) held back (see above)" }
   } finally { Remove-Item -LiteralPath $t -Recurse -Force -ErrorAction SilentlyContinue }
 }
 
@@ -473,6 +485,8 @@ switch ($cmd) {
         if (-not $a1) { Fail 'usage: bridge files share <path> [minutes, default 60]' }
         $m = if ($rest.Count -gt 2) { $rest[2] } else { '60' }
         if ($m -notmatch '^\d{1,4}$' -or [int]$m -lt 1 -or [int]$m -gt 1440) { Fail 'minutes must be a number from 1 to 1440' }
+        $script:QuietErr = $true; try { $r = Invoke-Remote $c "files-share $m" -InBytes ($Utf8.GetBytes("`n")) } finally { $script:QuietErr = $false }   # sharing off? say so before uploading
+        if ($r.Err -match 'sharing is off') { [Console]::Error.Write($r.Err); Fail 'no link made' }
         Push-Files $c $a1 $true
         $r = Invoke-Remote $c "files-share $m" -InBytes ($Utf8.GetBytes("$script:Scope`n")); if ($r.Code) { Fail 'no link made' }
         Write-Output $r.Out.Trim()

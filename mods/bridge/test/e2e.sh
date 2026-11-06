@@ -305,7 +305,7 @@ t "names Windows can't hold are skipped with the reason" sh -c 'echo "$1" | grep
 t "  ... and the rest still went" sh -c 'echo "$1" | grep -q "sending f0"' _ "$o"
 L "rm -f '$LF/what?.txt' '$LF/report 10:30.md'"
 V "echo x > '$FS/bad:name.md' && echo y > $FS/good-after-bad.md"; o=$(L 'bridge files pull' 2>&1); rc=$?
-t "a server file named bad:name.md doesn't block pull" sh -c '[ "$1" = 0 ]' _ "$rc"
+t "a server file named bad:name.md doesn't block pull (it's listed as held back: exit 3)" sh -c '[ "$1" = 3 ]' _ "$rc"
 t "  ... the good file arrives" L "grep -qx y $LF/good-after-bad.md"
 V "rm -f '$FS/bad:name.md'"
 L "mkdir -p /tmp/elsewhere && echo decoy > /tmp/elsewhere/good-after-bad.md"
@@ -332,6 +332,20 @@ L "cp /tmp/cfg.bak ~/pierce-bridge/config"
 L "echo s1 > $LF/sync-up.md"; V "echo s2 > $FS/sync-down.md"
 o=$(L 'bridge files sync' 2>&1)
 t "bridge files sync = pull, then push" V "grep -qx s1 $FS/sync-up.md" && t "  ... both ways" L "grep -qx s2 $LF/sync-down.md"
+V "echo t > '$FS/token-usage-report.md' && echo q > '$FS/what?.md'"
+o=$(L 'bridge files pull' 2>&1); rc=$?
+t "server files that can't come down are listed with the reason (exit 3)" sh -c '[ "$1" = 3 ] && echo "$2" | grep -q "on the server, skipped token-usage-report.md: looks like a secret" && echo "$2" | grep -q "on the server, skipped what?.md: Windows"' _ "$rc" "$o"
+o=$(L 'bridge files pull token-usage-report.md' 2>&1)
+t "  ... pulling one by name says why, not 'not on the server'" sh -c 'echo "$1" | grep -q "looks like a secret" && ! echo "$1" | grep -q "no file or folder"' _ "$o"
+V "/bin/rm -f '$FS/token-usage-report.md' '$FS/what?.md'"
+L "mkdir -p $LF/lots && cd $LF/lots && i=0; while [ \$i -lt 4100 ]; do : > f\$i; i=\$((i+1)); done"
+o=$(L 'bridge files push lots' 2>&1)
+t "4,100 files go through (batches of at most 4,000 files)" sh -c 'echo "$1" | grep -q "sent 4100 files"' _ "$o"
+L "/bin/rm -rf $LF/lots"; V "/bin/rm -rf $FS/lots"
+L "mkdir -p $LF/samename && echo f > /tmp/samename"
+o=$(L 'bridge files push /tmp/samename' 2>&1)
+t "an outside file named like a store folder is refused" sh -c 'echo "$1" | grep -q "already a folder called samename"' _ "$o"
+t "  ... nothing was copied into that folder" L "test ! -e $LF/samename/samename"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"
@@ -369,6 +383,9 @@ o=$(L "printf '../bridge/messages.tsv\n../../.ssh/authorized_keys\n/etc/passwd\n
 t "files-get sends nothing outside the store" sh -c '[ -z "$1" ]' _ "$o"
 o=$(L "$K 'files-put ../x' </dev/null 2>&1"); rc=$?
 t "files-put refuses a bad name" sh -c '[ "$1" = 3 ]' _ "$rc"
+L "echo shareme > $LF/not-yet-sent.md"; o=$(L 'bridge files share not-yet-sent.md' 2>&1)
+t "share with sharing off uploads nothing" V "test ! -e $FS/not-yet-sent.md"
+L "/bin/rm -f $LF/not-yet-sent.md"
 o=$(L 'bridge files share docs/a.md' 2>&1); rc=$?
 t "share is off by default and says how to turn it on" sh -c '[ "$1" != 0 ] && echo "$2" | grep -q "LK_FILES_SHARE=1"' _ "$rc" "$o"
 V 'echo LK_FILES_SHARE=1 >> ~/.config/pierce-skill-kit/config'

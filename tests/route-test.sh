@@ -125,6 +125,12 @@ draw work  "{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$future},\"seve
 draw fresh "{\"five_hour\":{\"used_percentage\":1,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":50,\"resets_at\":$future}}"
 claude-pick list > "$T/list" 2>&1 < /dev/null
 check "list: one line per account, week + 5h + age, most room marked, no prompt" sh -c "[ \$(wc -l < '$T/list') = 4 ] && grep -qE '^  alpha +week 20% +5h 10% +\(just now\) +<- most room\$' '$T/list' && ! grep -q 'Account number' '$T/list'"
+claude-pick list --json > "$T/lj" 2>&1 < /dev/null
+check "list --json: array of 4 with the fields, alpha most_room" sh -c "jq -e 'length == 4 and (.[0] | keys == [\"account\",\"age_seconds\",\"five_hour_pct\",\"most_room\",\"weekly_pct\"]) and .[0].account == \"alpha\" and .[0].weekly_pct == 20 and .[0].five_hour_pct == 10 and .[0].most_room == true and ([.[] | select(.most_room)] | length == 1)' '$T/lj' >/dev/null"
+# reset times with a UTC offset still count (a full account says when it resets, not "unknown")
+draw fresh "{\"five_hour\":{\"used_percentage\":100,\"resets_at\":\"$(date -u -d "@$((future + 0))" +%Y-%m-%dT%H:%M:%S)-05:00\"},\"seven_day\":{\"used_percentage\":10}}"
+check "offset reset time (-05:00): full account says resets in, not unknown" sh -c "claude-pick list | grep -A1 fresh | grep -q 'resets in' && ! claude-pick list | grep -q 'reset time unknown'"
+draw fresh "{\"five_hour\":{\"used_percentage\":1,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":50,\"resets_at\":$future}}"
 # stale numbers (older than 24h) rank after fresh ones and auto says how old they are
 touch -d '3 days ago' "$XDG_CACHE_HOME/pierce-skill-kit/usage-alpha.json"
 check "stale: alpha (20%, 3d old) ranks after fresh work (30%)" [ "$(claude-pick order | head -1)" = "$HOME/.claude-work" ]

@@ -160,6 +160,8 @@ Good to know:
 - **Secrets stay home.** Same deny-list as sync: `.env`, keys, `.ssh`, anything named secret, token or credential.
   Push tells you once which files it kept back. Caught one by mistake (a Keynote `.key`, "Secret Santa.xlsx")?
   Rename it, or zip it.
+- **What the server won't send is listed**, with the reason (too big, looks like a secret, a name Windows can't
+  hold), so "up to date" never hides a file.
 - **Held back, never guessed:** a file here with the name of a folder there (or the other way round), and two names
   that differ only in capitals (`Report.md`, `report.md`), are skipped with a note until you rename one. Push and
   pull then end with exit code 3, so a script can tell.

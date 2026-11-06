@@ -14,7 +14,7 @@ cache=${XDG_CACHE_HOME:-$HOME/.cache}/statusline; mkdir -p "$cache"
 acct_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; acct_dir=${acct_dir%/}
 case $acct_dir in "$HOME/.claude") acct=main;; */.claude-*) acct=${acct_dir##*/.claude-};; *) acct=${acct_dir##*/}; acct=${acct#.};; esac   # any other folder: its own name
 rl=$(printf '%s' "$in" | jq -c '.rate_limits // empty' 2>/dev/null)
-if [ -n "$rl" ] && [ "$rl" != "{}" ]; then u=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit; mkdir -p "$u"; printf '%s' "$rl" > "$u/usage-$acct.json"; fi
+if [ -n "$rl" ] && [ "$rl" != "{}" ]; then u=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit; mkdir -p "$u"; printf '%s' "$rl" > "$u/usage-$acct.json.$$" && mv "$u/usage-$acct.json.$$" "$u/usage-$acct.json"; fi   # temp + mv: two tabs never leave half a file
 ck=$cache/$(printf '%s|%s|%s' "$dir" "$model" "${CLAUDE_CONFIG_DIR:-default}" | cksum | cut -d' ' -f1)
 if [ -f "$ck" ] && [ $(( $(date +%s) - $(mtime "$ck") )) -lt 30 ]; then cat "$ck"; exit 0; fi
 exec 3>&1 1>"$ck.$$"
@@ -32,22 +32,26 @@ printf '%b   %s' "$line1" "$extra"
 # and marked "(old: 7h ago)". The kit config is read as text (one sed), never run as shell.
 no5h=${LK_USAGE_NO_5H-$(sed -n 's/^[[:space:]]*\(export[[:space:]]*\)\{0,1\}LK_USAGE_NO_5H=//p' "${LK_CONFIG:-$HOME/.config/pierce-skill-kit/config}" 2>/dev/null | tail -1 | tr -d "\"'")}
 usage=$(for f in "${XDG_CACHE_HOME:-$HOME/.cache}"/pierce-skill-kit/usage-*.json; do
-    [ -s "$f" ] && jq -c --arg f "${f##*/}" --argjson m "$(mtime "$f")" '{n: ($f | sub("^usage-"; "") | sub("\\.json$"; "")), m: $m, r: .}' "$f" 2>/dev/null
+    [ -s "$f" ] || continue   # one file at a time: a damaged one only marks its own account
+    jq -c --arg f "${f##*/}" --argjson m "$(mtime "$f")" '{n: ($f | sub("^usage-"; "") | sub("\\.json$"; "")), m: $m, r: .}' "$f" 2>/dev/null \
+      || jq -nc --arg f "${f##*/}" '{n: ($f | sub("^usage-"; "") | sub("\\.json$"; "")), bad: true}'
   done | jq -rn --argjson now "$(date +%s)" --arg cur "$acct" --arg no5h " $no5h " '
   def bar(p): ([5, ((p // 0) / 20 | round)] | min) as $n | ("▰" * $n) + ("▱" * (5 - $n));
   def col(p; old): if old then "\u001b[2m" elif p >= 85 then "\u001b[31m" elif p >= 60 then "\u001b[33m" else "\u001b[32m" end;
-  def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "") | sub("\\+00:00$"; "Z") | fromdateiso8601) end) catch null;
+  def ts(r): try (if (r|type) == "number" then r else (r | sub("\\.[0-9]+"; "")) as $s | ($s | capture("(?<s>[+-])(?<h>[0-9]{2}):(?<m>[0-9]{2})$") // {s: "+", h: "00", m: "00"}) as $o | ($s | sub("[+-][0-9]{2}:[0-9]{2}$"; "Z") | fromdateiso8601) - (if $o.s == "-" then -1 else 1 end) * (($o.h | tonumber) * 3600 + ($o.m | tonumber) * 60) end) catch null;
   def dur(s): ([0, s / 60 | floor] | max) as $m
       | if $m >= 1440 then "\($m / 1440 | floor)d\($m % 1440 / 60 | floor)h" elif $m >= 60 then "\($m / 60 | floor)h" else "\($m)m" end;
   def left(r): ts(r) as $t | if $t == null or $t - $now < 60 then "" else " \u001b[2m↻\(dur($t - $now))\u001b[0m" end;   # no time, or already reset: no ↻
   def win(lbl; w; old): if w == null or w.used_percentage == null then empty else
     (if (ts(w.resets_at) // $now + 1) < $now then 0 else w.used_percentage end) as $p   # window already reset: 0%
     | "\(lbl) \(col($p; old))\(bar($p)) \($p | round)%\u001b[0m\(left(w.resets_at))" end;
-  [inputs | .n as $n | (($now - .m) > 21600) as $old
+  def unreadable: "\u001b[2m(unreadable)\u001b[0m";
+  [inputs | .n as $n | ((($now - (.m // $now)) > 21600)) as $old
+    | try (if .bad then error("bad") else . end
     | .w = [if ($no5h | contains(" \($n) ")) then "5h \(if $old then "\u001b[2m" else "\u001b[1;32m" end)∞\u001b[0m"
             elif .r.five_hour == null and .r.seven_day != null then "5h \u001b[2m–\u001b[0m"
             else win("5h"; .r.five_hour; $old) end, win("week"; .r.seven_day; $old)] | select(.w | length > 0)
-    | .w += (if $old then ["\u001b[2m(old: \(($now - .m) / 3600 | floor | if . >= 24 then "\(. / 24 | floor)d" else "\(.)h" end) ago)\u001b[0m"] else [] end)] as $a
+    | .w += (if $old then ["\u001b[2m(old: \(($now - .m) / 3600 | floor | if . >= 24 then "\(. / 24 | floor)d" else "\(.)h" end) ago)\u001b[0m"] else [] end)) catch {n: $n, w: [unreadable]}] as $a
   | $a[] | (if ($a | length) > 1 then (if .n == $cur then "\u001b[1;36m▶ \(.n)\u001b[0m  " else "  \(.n)  " end) else "" end) + (.w | join("   "))
   ')
 [ -n "$usage" ] && printf '\n%s' "$usage"

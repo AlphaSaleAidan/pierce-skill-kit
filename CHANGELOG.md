@@ -20,10 +20,12 @@ your settings), then `bridge files setup`.
   skipped with the reason (`work: 5h at 100%, resets in 2h, skipped`); if all are full, `auto` says which resets
   first and starts nothing. With no numbers yet it says so instead of naming a winner. Bad menu input gets
   `pick 1-N`. Works with macOS `stat`/`date`. Try: `claude-pick auto -p "hello"`. Windows:
-  `ssh -t me@my-server '~/.local/bin/claude-pick'`.
+  a one-line PowerShell function in docs/accounts.md. `claude-pick list --json` is for scripts.
 - **usage** installer: `sh mods/usage/install.sh` is the statusline mod plus the server-busy helper, one line per
   account: `▶ main  5h ▰▰▱▱▱ 40%   week ▰▰▰▰▰ 91%` and `  work  5h ∞   week ▰▱▱▱▱ 10%`. Numbers over 6h old are
   dimmed and say `(old: 3d ago)`. ∞ only for accounts in `LK_USAGE_NO_5H`; the kit config is read as text, not run.
+  One damaged usage file now shows `(unreadable)` for that account only; usage files are written atomically; reset
+  times with a UTC offset (`-05:00`) show a countdown.
   The status line now works on macOS (it used Linux-only `stat`/`date` flags and printed nothing there).
 
 ### Changed (may break a script)

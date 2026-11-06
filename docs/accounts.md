@@ -28,7 +28,7 @@ claude-tab ~/code/client-a -n client-a -a work
   "no data yet" until you've used it with that installed. No login token is read and no private API is called.
 - **Start on the account with the most room** (route mod, `sh mods/route/install.sh`): `claude-pick` shows a menu
   sorted by weekly %, then 5-hour % (Enter = the top one); `claude-pick auto -p "..."` skips the menu;
-  `claude-pick order` prints the config folders in that order for scripts; `claude-pick list` prints one plain
+  `claude-pick order` prints the config folders in that order for scripts; `claude-pick list` (add `--json` for scripts) prints one plain
   line per account (weekly %, 5h %, how old the numbers are, "most room" mark) with no menu, so it works over ssh
   and outside a Claude tab. Numbers older than 24h rank after fresh ones and `auto` says
   `(numbers 2d old)` if it must use them. An account at 95% or more of its 5-hour
@@ -36,9 +36,18 @@ claude-tab ~/code/client-a -n client-a -a work
   (`work: 5h at 100%, resets in 2h, skipped`). If every account is full, `auto` says which resets first and exits 1
   without starting Claude. An account with no numbers yet sorts after those with numbers; with no numbers at all it
   says so and `auto` starts main. With the route mod installed, plain `claude-acct` opens the same menu.
-  Works on Linux and macOS. Windows: these run on your server, so from PowerShell run
-  `ssh -t me@my-server '~/.local/bin/claude-pick'` (`-t` gives the menu a terminal; the full path is needed because a
-  one-command ssh login often skips `~/.local/bin` on PATH). See [windows.md](windows.md).
+  Works on Linux and macOS. Windows: these run on your server. Put this once in your PowerShell profile
+  (`notepad $PROFILE`), then type `claude-pick` (`-t` gives the menu a terminal; the full path is needed because a
+  one-command ssh login often skips `~/.local/bin` on PATH):
+
+  ```powershell
+  function claude-pick {
+    ssh -t me@my-server `
+      '~/.local/bin/claude-pick' @args
+  }
+  ```
+
+  See [windows.md](windows.md).
 - **Remove an account:** sign out in it (`/logout`), then delete `~/.claude-<name>`.
 
 ## What it looks like
@@ -47,7 +56,7 @@ The status line with three accounts (`▶` = the account this tab runs on; colou
 ```text
 ▶ main  5h ▰▰▱▱▱ 40% ↻2h   week ▰▰▰▰▰ 91% ↻1d1h
   work  5h ∞   week ▰▱▱▱▱ 10% ↻3d4h
-  spare  5h –   week ▰▰▰▱▱ 52% ↻6d   (old: 3d ago)
+  spare  5h –   week ▰▰▰▱▱ 52% (old: 3d ago)
 ```
 
 `∞` = no 5-hour limit (you list the account in `LK_USAGE_NO_5H`), `5h –` = Claude Code sent no 5-hour window,
