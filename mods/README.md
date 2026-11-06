@@ -1,7 +1,7 @@
 # Mods: Claude Code plugins, status line and hooks
 
 The Claude Code mods that run alongside the lead + tabs setup. Each installs with one command and uninstalls with
-`--uninstall`; restart Claude Code after either. Needs `jq`. All three plugin mods validate and pass their tests
+`--uninstall`; restart Claude Code after either. Needs `jq`. The three Claude Code plugins (agent-board, model-map, projects-hub) validate and pass their tests
 (`claude plugin validate <dir>`, `claude plugin test <dir>`) on Claude Code 2.1.296, also in a clean container.
 
 - **agent-board**: A live board above the prompt: every subagent's model, task and current action, coloured green/yellow/red by how much it's struggling. Adds an `ask` tool (any agent can ask you a clarifying question with options), topic-based session titles, a server-overload warning, and `/lead-here <name>` to mark the lead so other sessions get a relay note pointing at it. `/board` hides it.

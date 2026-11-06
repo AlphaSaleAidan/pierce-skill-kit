@@ -10,8 +10,9 @@ in=$(cat)
 dir=$(printf '%s' "$in" | jq -r '.workspace.current_dir // empty'); dir=${dir:-$PWD}
 model=$(printf '%s' "$in" | jq -r '.model.display_name // empty')
 cache=${XDG_CACHE_HOME:-$HOME/.cache}/statusline; mkdir -p "$cache"
-# Save this account's latest plan usage for `claude-acct list` (main = ~/.claude, else the .claude-<name> folder).
-acct_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; acct_dir=${acct_dir%/}; acct=${acct_dir##*/.claude-}; [ "$acct_dir" = "$HOME/.claude" ] && acct=main
+# Save this account's latest plan usage for `claude-acct list` (main = ~/.claude, ~/.claude-<name> = <name>, any other folder = its folder name).
+acct_dir=${CLAUDE_CONFIG_DIR:-$HOME/.claude}; acct_dir=${acct_dir%/}
+case $acct_dir in "$HOME/.claude") acct=main;; */.claude-*) acct=${acct_dir##*/.claude-};; *) acct=${acct_dir##*/}; acct=${acct#.};; esac   # any other folder: its own name
 rl=$(printf '%s' "$in" | jq -c '.rate_limits // empty' 2>/dev/null)
 if [ -n "$rl" ] && [ "$rl" != "{}" ]; then u=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit; mkdir -p "$u"; printf '%s' "$rl" > "$u/usage-$acct.json"; fi
 ck=$cache/$(printf '%s|%s|%s' "$dir" "$model" "${CLAUDE_CONFIG_DIR:-default}" | cksum | cut -d' ' -f1)

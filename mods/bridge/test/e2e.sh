@@ -313,6 +313,25 @@ V "echo y2 > $FS/good-after-bad.md"; o=$(L 'cd /tmp/elsewhere && bridge files pu
 t "pull <name> means the store's file even if the current folder has one" L "grep -qx y2 $LF/good-after-bad.md && grep -qx decoy /tmp/elsewhere/good-after-bad.md"
 o=$(L 'bridge files batch' 2>&1)
 t "bridge files <path> shows just that folder" sh -c 'echo "$1" | grep -q "same.*batch/f1" && ! echo "$1" | grep -q "f0"' _ "$o"
+L "echo f > $LF/rep"; V "mkdir -p $FS/rep && echo x > $FS/rep/x"
+o=$(L 'bridge files push' 2>&1); rc=$?
+t "a file here named like a folder there is skipped, with the reason, exit 3" sh -c '[ "$1" = 3 ] && echo "$2" | grep -q "skipped rep: a file on one side has the name of a folder"' _ "$rc" "$o"
+t "  ... and the server folder is untouched" V "test -d $FS/rep && test ! -e $FS/rep/rep"
+o=$(L 'bridge files pull' 2>&1); rc=$?
+t "  ... pull skips it too (exit 3) and writes nothing odd" sh -c '[ "$1" = 3 ]' _ "$rc"
+t "  ... the local file is untouched" L "grep -qx f $LF/rep"
+L "/bin/rm -f $LF/rep"; V "/bin/rm -rf $FS/rep"
+L "echo A > $LF/CASE.txt"; V "echo b > $FS/case.txt"
+o=$(L 'bridge files' 2>&1)
+t "names that differ only in capitals are flagged and skipped" sh -c 'echo "$1" | grep -q "skipped CASE.txt: another name differs only in capitals" && echo "$1" | grep -q "2 skipped"' _ "$o"
+L "/bin/rm -f $LF/CASE.txt"; V "/bin/rm -f $FS/case.txt"
+L "cp ~/pierce-bridge/config /tmp/cfg.bak && sed -i 's/^BRIDGE_VPS=.*/BRIDGE_VPS=tester@nohost-x/' ~/pierce-bridge/config"
+o=$(L 'timeout 60 bridge files setup /tmp/elsewhere-store' 2>&1)
+t "setup while offline changes nothing" L "grep -qx BRIDGE_FILES=/root/PierceFiles ~/pierce-bridge/config && test -s ~/pierce-bridge/files-base.tsv && test ! -e /tmp/elsewhere-store"
+L "cp /tmp/cfg.bak ~/pierce-bridge/config"
+L "echo s1 > $LF/sync-up.md"; V "echo s2 > $FS/sync-down.md"
+o=$(L 'bridge files sync' 2>&1)
+t "bridge files sync = pull, then push" V "grep -qx s1 $FS/sync-up.md" && t "  ... both ways" L "grep -qx s2 $LF/sync-down.md"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"

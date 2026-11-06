@@ -23,7 +23,7 @@ names() { echo main; for d in "$HOME"/.claude-*/; do
   [ -e "$d.credentials.json" ] || [ -e "$d.claude.json" ] || [ -e "$d.kit-account" ] || continue
   d=${d%/}; echo "${d##*/.claude-}"; done; }
 mtime() { stat -c %Y "$1" 2>/dev/null || stat -f %m "$1"; }   # GNU, then BSD/macOS
-ago() { s=$1; if [ "$s" -lt 3600 ]; then echo "$((s / 60))m ago"; elif [ "$s" -lt 86400 ]; then echo "$((s / 3600))h ago"; else echo "$((s / 86400))d ago"; fi; }
+ago() { s=$1; if [ "$s" -lt 60 ]; then echo "just now"; elif [ "$s" -lt 3600 ]; then echo "$((s / 60))m ago"; elif [ "$s" -lt 86400 ]; then echo "$((s / 3600))h ago"; else echo "$((s / 86400))d ago"; fi; }
 usage() { # usage <name>: "5h 23% · week 71% (2h ago)" from the statusline's saved rate_limits, or "no data yet"
   f=$CACHE/usage-$1.json
   [ -s "$f" ] && command -v jq >/dev/null || { echo "no data yet"; return; }
@@ -46,11 +46,11 @@ case $1 in
     d=$(dir_of "$n"); mkdir -p "$MAIN" "$d"; chmod 700 "$d"; : > "$d/.kit-account"; share "$d"
     echo "account '$n' ready in $d (shares your skills, CLAUDE.md and settings). Sign in now: type /login in the Claude that opens."
     run "$n";;
-  run) shift; [ -n "$1" ] || { echo "usage: claude-acct run <name> [args]" >&2; exit 2; }; for n in $(names); do [ "$n" = main ] || share "$(dir_of "$n")"; done; run "$@";;
+  run) shift; [ -n "$1" ] || { echo "usage: claude-acct run <name> [args]" >&2; exit 2; }; names | while IFS= read -r n; do [ "$n" = main ] || share "$(dir_of "$n")"; done; run "$@";;
   names) names;;
-  list) for n in $(names); do printf '  %-10s %s\n' "$n" "$(usage "$n")"; done;;
+  list) names | while IFS= read -r n; do printf '  %-10s %s\n' "$n" "$(usage "$n")"; done;;
   "") command -v claude-pick >/dev/null && exec claude-pick
-    i=0; for n in $(names); do i=$((i + 1)); printf '  %d) %-10s %s\n' "$i" "$n" "$(usage "$n")"; done
+    i=$(names | wc -l | tr -d ' '); names | { j=0; while IFS= read -r n; do j=$((j + 1)); printf '  %d) %-10s %s\n' "$j" "$n" "$(usage "$n")"; done; }
     printf 'Account number (Enter = main): '; read -r k
     case $k in '') k=1;; *[!0-9]*|??????*) k=0;; esac   # digits only, and short enough for test(1); main is always 1
     if [ "$k" -lt 1 ] || [ "$k" -gt "$i" ]; then echo "pick 1-$i" >&2; exit 2; fi

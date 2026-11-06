@@ -11,7 +11,8 @@ your settings), then `bridge files setup`.
 - **File store** in the bridge mod: `bridge files push` / `pull` for files up to 100 MB each, both ways over the same
   SSH link (Mac, Linux, Windows). Only changed files travel, each listed as it goes; a replaced copy goes to a
   `files-trash` folder, never lost; same deny-list as sync. A file changed on both sides is never overwritten: push
-  says to pull first, pull keeps both. `bridge files` shows what's the same, to push or to pull.
+  says to pull first, pull keeps both. `bridge files` shows what's the same, to push or to pull (the dry
+  run); `bridge files sync` pulls then pushes. Big transfers go in 100 MB batches with a speed line; rerun to resume.
   `bridge files push ~/Desktop/q3.pdf` copies a file in and sends it.
   `bridge files share q3.pdf 30` makes a 30-minute link, off until the server owner sets `LK_FILES_SHARE=1`.
 - **route** mod: `claude-pick` starts Claude on whichever of your accounts has the most room (menu with each number's

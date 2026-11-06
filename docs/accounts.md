@@ -6,15 +6,13 @@ its own login and plan, and follow your plan's terms.** `claude-pick` just start
 left; it reads no login, calls no API, and never moves a running session to another account.
 
 ```sh
-# create ~/.claude-work, share your setup
-# into it, open Claude (type /login)
+# new account ~/.claude-work (then /login)
 claude-acct add work
-# pick an account (shows last 5-hour and
-# weekly usage) and start Claude
+# menu with last 5h / weekly usage
 claude-acct
-# accounts + usage
-claude-acct list
-# start Claude on work ("main" = ~/.claude)
+# one line per account, plain text
+claude-pick list
+# start Claude on work (main = ~/.claude)
 claude-acct run work
 # a project tab that runs on work
 claude-tab ~/code/client-a -n client-a -a work
@@ -30,7 +28,10 @@ claude-tab ~/code/client-a -n client-a -a work
   "no data yet" until you've used it with that installed. No login token is read and no private API is called.
 - **Start on the account with the most room** (route mod, `sh mods/route/install.sh`): `claude-pick` shows a menu
   sorted by weekly %, then 5-hour % (Enter = the top one); `claude-pick auto -p "..."` skips the menu;
-  `claude-pick order` prints the config folders in that order for scripts. An account at 95% or more of its 5-hour
+  `claude-pick order` prints the config folders in that order for scripts; `claude-pick list` prints one plain
+  line per account (weekly %, 5h %, how old the numbers are, "most room" mark) with no menu, so it works over ssh
+  and outside a Claude tab. Numbers older than 24h rank after fresh ones and `auto` says
+  `(numbers 2d old)` if it must use them. An account at 95% or more of its 5-hour
   or weekly window is **full**: it goes last, `auto` never picks it and says why
   (`work: 5h at 100%, resets in 2h, skipped`). If every account is full, `auto` says which resets first and exits 1
   without starting Claude. An account with no numbers yet sorts after those with numbers; with no numbers at all it

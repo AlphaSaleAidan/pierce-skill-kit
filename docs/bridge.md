@@ -127,7 +127,11 @@ Get what Claude made on the server:
 ```
 bridge files pull
 ```
-See what's the same, what's waiting, and what changed on both sides (nothing is moved):
+Both at once (pull first, then push):
+```
+bridge files sync
+```
+See what's the same, what's waiting, and what changed on both sides. Nothing moves, so it's also the dry run:
 ```
 bridge files
 ```
@@ -144,9 +148,10 @@ got 1 file from the server, in /home/jake/PierceFiles
 ```
 
 Good to know:
-- **Only new or changed files travel,** in batches of up to 100 MB, each file listed as it goes (no percentage
-  bar). If the link drops, run the same command again: finished files aren't sent twice. Allow about a minute per
-  100 MB on a typical home upload.
+- **Only new or changed files travel,** in batches of up to 100 MB. Each file is listed as it goes, and each big
+  batch ends with a speed line (`... 57 MB in 12 s (4.7 MB/s)`). If the link drops, run the same command again:
+  finished files aren't sent twice. Allow about a minute per 100 MB on a home upload, and about a minute for the
+  first push of a few thousand small files (zip them if you can).
 - **Deleting a file doesn't delete it on the other side.** Delete it in both places, or ask Claude to.
 - **Changed on both sides?** `push` won't overwrite the server's copy; it tells you to pull. `pull` keeps both: the
   server's copy takes the name and yours moves beside it as `q3.conflict-<your computer>-<time>.md`.
@@ -155,6 +160,9 @@ Good to know:
 - **Secrets stay home.** Same deny-list as sync: `.env`, keys, `.ssh`, anything named secret, token or credential.
   Push tells you once which files it kept back. Caught one by mistake (a Keynote `.key`, "Secret Santa.xlsx")?
   Rename it, or zip it.
+- **Held back, never guessed:** a file here with the name of a folder there (or the other way round), and two names
+  that differ only in capitals (`Report.md`, `report.md`), are skipped with a note until you rename one. Push and
+  pull then end with exit code 3, so a script can tell.
 - **Names Windows can't hold** (with `\ : * ? " < > |`, ending in a dot or space, or `CON`, `NUL`...) are skipped
   with a note, on every computer, so the folder always works on Windows too.
 - **Server off or computer asleep?** Push and pull say "can't reach the server" and change nothing. Run them

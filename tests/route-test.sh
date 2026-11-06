@@ -113,10 +113,45 @@ printf '#!/bin/sh\n[ "$1" = -r ] && { echo "date: illegal time format" >&2; exit
 chmod +x "$T/bsd/stat" "$T/bsd/date"
 check "BSD stat/date: ranks the same" [ "$(PATH=$T/bsd:$PATH claude-pick order | head -1)" = "$(claude-pick order | head -1)" ]
 check "BSD stat/date: menu shows each number's age" sh -c "printf '\n' | PATH='$T/bsd':\"\$PATH\" claude-pick 2>&1 | grep -qE '1\) alpha .*\(just now\)'"
-check "BSD stat/date: claude-acct list shows ages" sh -c "PATH='$T/bsd':\"\$PATH\" claude-acct list | grep -qE 'alpha +5h 97% · week 20% \(0m ago\)'"
+check "BSD stat/date: claude-acct list shows ages" sh -c "PATH='$T/bsd':\"\$PATH\" claude-acct list | grep -qE 'alpha +5h 97% · week 20% \(just now\)'"
 
 # claude-acct with no arguments is the same picker when claude-pick is installed
 check "claude-acct menu = claude-pick menu when the route mod is installed" sh -c "printf '\n' | claude-acct 2>&1 | grep -q 'Every account is full'"
+
+# list: plain text, one line per account, no menu prompt, most room marked
+draw alpha "{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":20,\"resets_at\":$future}}"
+draw main  "{\"five_hour\":{\"used_percentage\":5,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":60,\"resets_at\":$future}}"
+draw work  "{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":30,\"resets_at\":$future}}"
+draw fresh "{\"five_hour\":{\"used_percentage\":1,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":50,\"resets_at\":$future}}"
+claude-pick list > "$T/list" 2>&1 < /dev/null
+check "list: one line per account, week + 5h + age, most room marked, no prompt" sh -c "[ \$(wc -l < '$T/list') = 4 ] && grep -qE '^  alpha +week 20% +5h 10% +\(just now\) +<- most room\$' '$T/list' && ! grep -q 'Account number' '$T/list'"
+# stale numbers (older than 24h) rank after fresh ones and auto says how old they are
+touch -d '3 days ago' "$XDG_CACHE_HOME/pierce-skill-kit/usage-alpha.json"
+check "stale: alpha (20%, 3d old) ranks after fresh work (30%)" [ "$(claude-pick order | head -1)" = "$HOME/.claude-work" ]
+check "stale: list shows its age and no most-room mark on it" sh -c "claude-pick list | grep -E 'alpha .*\(3d ago\)\$' | grep -vq 'most room'"
+touch -d '3 days ago' "$XDG_CACHE_HOME/pierce-skill-kit/usage-fresh.json" "$XDG_CACHE_HOME/pierce-skill-kit/usage-work.json" "$XDG_CACHE_HOME/pierce-skill-kit/usage-main.json"
+check "all stale: auto still starts one and says (numbers 3d old)" sh -c "claude-pick auto 2>&1 | grep -q 'claude-pick: .*(numbers 3d old)' && ! claude-pick auto 2>&1 | grep -q 'most room'"
+draw alpha "{\"five_hour\":{\"used_percentage\":10,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":20,\"resets_at\":$future}}"
+check "fresh numbers again: auto says most room" sh -c "claude-pick auto 2>&1 | grep -qx 'claude-pick: alpha (most room)' || claude-pick auto 2>&1 | grep -q 'CFG=.*alpha'"
+
+# an account folder with a space is ONE account: no ghost rows, no link errors, quoted everywhere
+mkdir -p "$HOME/.claude-my acct"; : > "$HOME/.claude-my acct/.kit-account"
+draw "my acct" "{\"five_hour\":{\"used_percentage\":1,\"resets_at\":$future},\"seven_day\":{\"used_percentage\":2,\"resets_at\":$future}}"
+check "space: claude-acct names lists 'my acct' once" [ "$(claude-acct names | grep -c 'my')" = 1 ] 
+claude-acct run "my acct" > "$T/sp" 2>&1 || true
+check "space: run starts it with its folder and no ln errors" sh -c "grep -q 'CFG=$HOME/.claude-my acct' '$T/sp' && ! grep -qi 'ln:\|failed' '$T/sp'"
+check "space: list shows one 'my acct' row, no 'acct' ghost" sh -c "claude-pick list | grep -c 'my acct' | grep -qx 1 && ! claude-pick list | grep -qE '^  (my|acct) +week'"
+check "space: auto picks it (most room) with the right folder" [ "$(claude-pick auto 2>/dev/null)" = "CFG=$HOME/.claude-my acct ARGS=" ]
+check "space: order prints its folder on one line" sh -c "claude-pick order | grep -cx '$HOME/.claude-my acct' | grep -qx 1"
+check "space: menu 1 = it" [ "$(printf '1\n' | claude-pick 2>/dev/null | grep -o 'CFG=.*ARGS')" = "CFG=$HOME/.claude-my acct ARGS" ]
+check "space: claude-acct menu lists it once" sh -c "printf '\n' | CLAUDE_BIN=true PATH='$T/nopick':\$PATH claude-acct 2>&1 | grep -c 'my acct' | grep -qx 1" 
+
+# the status line for a config folder not named ~/.claude-*: its bars show, usage saved under its folder name
+mkdir -p "$T/opt/x/claude"
+out=$(printf '{"workspace":{"current_dir":"%s"},"model":{"display_name":"Opus"},"rate_limits":{"five_hour":{"used_percentage":5,"resets_at":%s}}}' "$T" "$future" | CLAUDE_CONFIG_DIR=$T/opt/x/claude sh "$SL" 2>&1)
+check "other folder: no error, usage saved as usage-claude.json" sh -c "[ -s '$XDG_CACHE_HOME/pierce-skill-kit/usage-claude.json' ] && ! printf '%s' '$out' | grep -qi 'cannot\|nonexistent'"
+check "other folder: its 5h bar is drawn" sh -c "printf '%s' '$out' | grep -q '5h .*5%'"
+rm -f "$XDG_CACHE_HOME/pierce-skill-kit/usage-claude.json"
 
 # safety: nothing in the route mod reads logins or calls a usage API, and nothing retries on another account
 hits=$(grep -rniE 'credentials|accessToken|oauth|api\.anthropic|/api/|curl |fetch\(|failover' \
@@ -131,7 +166,7 @@ check "claude-acct menu: Enter = main" [ "$(printf '\n' | claude-acct 2>/dev/nul
 check "claude-acct menu: 2 = second account" [ "$(printf '2\n' | claude-acct 2>/dev/null | grep -o 'CFG=[^ ]*')" = "CFG=$HOME/.claude-alpha" ]
 cd "$T"; for k in 0 9 abc '1p;e touch pwned2' '99999999999999999999'; do
   rc=0; printf '%s\n' "$k" | claude-acct > "$T/bad" 2>&1 || rc=$?
-  check "claude-acct menu refuses '$k' with 'pick 1-4'" sh -c "[ $rc = 2 ] && grep -q 'pick 1-4\$' '$T/bad' && ! grep -qiE 'CFG=|sed|invalid|illegal|expected' '$T/bad'"
+  check "claude-acct menu refuses '$k' with 'pick 1-5'" sh -c "[ $rc = 2 ] && grep -q 'pick 1-5\$' '$T/bad' && ! grep -qiE 'CFG=|sed|invalid|illegal|expected' '$T/bad'"
 done; check "claude-acct menu input never runs as a command" [ ! -e "$T/pwned2" ]; cd - >/dev/null
 echo "route-test: $pass passed, $fail failed"
 [ "$fail" = 0 ]
