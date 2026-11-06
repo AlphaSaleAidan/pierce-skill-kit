@@ -40,7 +40,7 @@ function Get-SyncFiles([string]$root) {   # relative paths ('/' separated) that 
   foreach ($f in Get-ChildItem -LiteralPath $full -Recurse -File -Force -ErrorAction SilentlyContinue) {
     if ($f.Attributes -band [IO.FileAttributes]::ReparsePoint) { continue }
     $rel = $f.FullName.Substring($full.Length + 1).Replace('\', '/')
-    if (Test-Denied $rel) { continue }
+    if ((Test-Denied $rel) -or ($rel -match '\.part-\d+$')) { continue }   # .part-N: a copy cut off mid-way, never sent
     if ($f.Length -gt $MaxFile) { [Console]::Error.WriteLine("bridge: skipped ${rel}: $([Math]::Ceiling($f.Length / 1MB)) MB, over the $($MaxFile / 1MB) MB cap"); continue }
     $out.Add($rel)
   }
@@ -200,7 +200,10 @@ function Get-Scope($c, [string]$mode, [string]$p) {  # a path inside the store -
   if (-not $p) { return '' }
   if ($mode -ne 'push' -and -not [IO.Path]::IsPathRooted($p)) {   # pull/status: a relative path means a path in the store
     $s = $p.Replace('\', '/').TrimEnd('/'); if ($s.StartsWith('./')) { $s = $s.Substring(2) }
-    if ($s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }; return $s
+    if ($s.Contains('..') -or $s.Contains(':')) { Fail "refused path: $p" }
+    $root = [IO.Path]::GetFullPath($c.BRIDGE_FILES).TrimEnd('\', '/'); $here = (Get-Location).ProviderPath.TrimEnd('\', '/')
+    if ($here.StartsWith($root + [IO.Path]::DirectorySeparatorChar, $PathCmp)) { $s = $here.Substring($root.Length + 1).Replace('\', '/') + "/$s" }   # from where you are, if inside the store
+    return $s
   }
   $root = [IO.Path]::GetFullPath($c.BRIDGE_FILES).TrimEnd('\', '/')
   if (Test-Path -LiteralPath $p) {

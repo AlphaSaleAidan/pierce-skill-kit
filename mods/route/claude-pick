@@ -15,6 +15,7 @@
 # and no API is called. Use only accounts you're entitled to use, under your plan's terms.
 CACHE=${XDG_CACHE_HOME:-$HOME/.cache}/pierce-skill-kit
 NODATA="No usage numbers yet: install the usage status line (sh mods/usage/install.sh) and open each account once."
+PATH=$HOME/.local/bin:$PATH   # run over plain ssh (no login shell), the kit's tools still resolve
 command -v jq >/dev/null || { echo "claude-pick needs jq" >&2; exit 1; }
 ACCT=$(command -v claude-acct) || { echo "claude-pick needs claude-acct (the kit's core install)" >&2; exit 1; }
 dir_of() { [ "$1" = main ] && echo "$HOME/.claude" || echo "$HOME/.claude-$1"; }

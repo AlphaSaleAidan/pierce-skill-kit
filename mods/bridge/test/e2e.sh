@@ -346,6 +346,11 @@ L "mkdir -p $LF/samename && echo f > /tmp/samename"
 o=$(L 'bridge files push /tmp/samename' 2>&1)
 t "an outside file named like a store folder is refused" sh -c 'echo "$1" | grep -q "already a folder called samename"' _ "$o"
 t "  ... nothing was copied into that folder" L "test ! -e $LF/samename/samename"
+L "echo half > '$LF/cut.bin.part-12345'"; o=$(L 'bridge files push' 2>&1)
+t "a cut-off copy (.part-N) is never listed or sent" V "test ! -e '$FS/cut.bin.part-12345'"
+L "/bin/rm -f '$LF/cut.bin.part-12345'"
+V "mkdir -p $FS/deep && echo dd > $FS/deep/in.md"; o=$(L "mkdir -p $LF/deep && cd $LF/deep && bridge files pull in.md" 2>&1)
+t "pull <name> from inside a store folder means that folder" L "grep -qx dd $LF/deep/in.md"
 V "mkdir -p $FS/out && echo from-claude > $FS/out/r.md"
 o=$(L 'bridge files pull' 2>&1)
 t "pull: server -> laptop" L "grep -qx from-claude $LF/out/r.md"
