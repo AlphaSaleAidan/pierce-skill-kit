@@ -47,10 +47,6 @@ if ask "Jumping Rope (ROPE.md session log that survives compaction) as a skill?"
   run mkdir -p "$CLAUDE_DIR/skills"
   run cp -r "$HOME/jumping-rope/adapters/claude-skill/jumping-rope" "$CLAUDE_DIR/skills/"
 fi
-if ask "claude-usage MCP (plan usage in a tool + status line)?"; then
-  [ -d "$HOME/claude-usage-mcp" ] || run git clone -q https://github.com/AlphaSaleAidan/claude-usage-mcp "$HOME/claude-usage-mcp"
-  mcp claude-usage claude-usage -- node "$HOME/claude-usage-mcp/server.mjs"
-fi
 if ask "Ruflo (ruvnet, MIT) in your home folder + the kit's overlay (covers every tab without its own init)?"; then
   if [ -f "$HOME/.claude/helpers/hook-handler.cjs" ]; then echo "= ruflo already initialised in $HOME"
   else run sh -c 'cd "$HOME" && npx -y ruflo@latest init --no-global'; fi

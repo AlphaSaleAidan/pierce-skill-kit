@@ -1,11 +1,11 @@
 #!/bin/sh
-# Jake's reports (yellow copy highlight, terminals closing, lost context) as tests, on a fresh user. Run per tmux:
+# A tester's reports (yellow copy highlight, terminals closing, lost context) as tests, on a fresh user. Run per tmux:
 #   for i in ubuntu:22.04 debian:12 debian:stable-slim; do docker run --rm -v "$PWD:/kit:ro" $i sh /kit/tests/views-test.sh; done
 set -e
 apt-get update -qq >/dev/null && apt-get install -y -qq tmux procps bsdutils >/dev/null 2>&1
-useradd -m jake
-cp -r /kit /tmp/kit && chown -R jake /tmp/kit
-su jake -s /bin/sh -c '
+useradd -m alex
+cp -r /kit /tmp/kit && chown -R alex /tmp/kit
+su alex -s /bin/sh -c '
 set -e
 export PATH=$HOME/.local/bin:$PATH TERM=xterm-256color
 fail() { echo "FAIL ($(tmux -V)): $*"; tmux list-sessions; exit 1; }

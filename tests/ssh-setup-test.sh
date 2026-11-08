@@ -4,11 +4,11 @@
 set -e
 apt-get update -qq >/dev/null && apt-get install -y -qq openssh-server openssh-client >/dev/null 2>&1
 useradd -m -s /bin/bash srv && echo 'srv:server-pw' | chpasswd     # the "server" account
-useradd -m -s /bin/zsh jake 2>/dev/null || useradd -m jake           # the person's own computer account
+useradd -m -s /bin/zsh alex 2>/dev/null || useradd -m alex           # the person's own computer account
 mkdir -p /run/sshd && printf 'Port 2222\nPasswordAuthentication yes\nKbdInteractiveAuthentication yes\n' > /etc/ssh/sshd_config.d/t.conf
 /usr/sbin/sshd
 printf '#!/bin/sh\necho asked >> /tmp/asked; echo server-pw\n' > /usr/local/bin/pw; chmod 755 /usr/local/bin/pw   # types the password
-su jake -s /bin/sh -c '
+su alex -s /bin/sh -c '
 set -e
 fail() { echo "FAIL: $*"; exit 1; }
 export SSH_ASKPASS=/usr/local/bin/pw SSH_ASKPASS_REQUIRE=force DISPLAY=x SHELL=/bin/zsh

@@ -5,7 +5,8 @@
 set -e
 KIT=$(cd "$(dirname "$0")/.." && pwd)
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
-export HOME=$T/home XDG_CACHE_HOME=$T/home/.cache LK_CONFIG=$T/none PATH=$T/home/.local/bin:$PATH
+RH=$HOME   # the real home: its ~/.local/bin may hold a real claude-pick, kept off PATH below
+export HOME=$T/home XDG_CACHE_HOME=$T/home/.cache LK_CONFIG=$T/none PATH=$T/home/.local/bin:$(printf %s "$PATH" | tr : "\n" | grep -vx "$RH/.local/bin" | paste -sd: -)
 unset CLAUDE_CONFIG_DIR
 mkdir -p "$HOME/.claude" "$HOME/.local/bin" "$T/bin"
 printf '#!/bin/sh\necho "CFG=${CLAUDE_CONFIG_DIR:-unset} ARGS=$*"\n' > "$T/bin/fakeclaude"; chmod +x "$T/bin/fakeclaude"

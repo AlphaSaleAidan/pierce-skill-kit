@@ -144,7 +144,7 @@ What it looks like:
 sent 2 files to the server
 > bridge files pull
   got clients/summary.md (26 bytes)
-got 1 file from the server, in /home/jake/PierceFiles
+got 1 file from the server, in /home/alex/PierceFiles
 ```
 
 Good to know:

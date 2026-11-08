@@ -109,10 +109,6 @@ One command installs the rest, asking before each group (`--yes` for all, `--lis
 
   Source: [AlphaSaleAidan/jumping-rope](https://github.com/AlphaSaleAidan/jumping-rope) · MIT
 
-- **claude-usage MCP**: lets Claude see its own session/weekly usage and stick to a budget
-
-  Source: [AlphaSaleAidan/claude-usage-mcp](https://github.com/AlphaSaleAidan/claude-usage-mcp) · MIT
-
 - **Ruflo + overlay**: ruvnet's orchestration + memory layer (`npx ruflo@latest init` in your home folder) plus this kit's 2-line fix so its memory bridge honours `CLAUDE_CONFIG_DIR`
 
   Source: [ruvnet/ruflo](https://github.com/ruvnet/ruflo) · MIT; details: [ruflo/README.md](ruflo/README.md)
